@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viaschema.com/schemas/shopping/types/appointment_option.json",
+  "title": "Appointment Option",
+  "description": "An available appointment time slot.",
+  "type": "object",
+  "ucp_shared_request": true,
+  "required": ["id", "start_time"],
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique appointment option identifier.",
+      "ucp_request": "omit"
+    },
+    "title": {
+      "type": "string",
+      "description": "Short label for the time slot (e.g., '10:00 AM with Sarah').",
+      "ucp_request": "omit"
+    },
+    "start_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Appointment start time.",
+      "ucp_request": "omit"
+    },
+    "end_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Appointment end time.",
+      "ucp_request": "omit"
+    },
+    "duration_minutes": {
+      "type": "integer",
+      "description": "Duration of the appointment in minutes.",
+      "ucp_request": "omit"
+    },
+    "staff": {
+      "$ref": "staff.json",
+      "description": "Staff member assigned to this time slot.",
+      "ucp_request": "omit"
+    }
+  }
+}

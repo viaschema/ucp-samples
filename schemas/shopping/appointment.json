@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viaschema.com/schemas/shopping/appointment.json",
+  "name": "com.viaschema.appointment",
+  "title": "Appointment Extension",
+  "description": "Extends Checkout with appointment/booking support for services.",
+  "$defs": {
+    "appointment_option": {
+      "$ref": "types/appointment_option.json"
+    },
+    "appointment_slot": {
+      "$ref": "types/appointment_slot.json"
+    },
+    "appointment": {
+      "$ref": "types/appointment.json"
+    },
+    "staff": {
+      "$ref": "types/staff.json"
+    },
+    "dev.ucp.shopping.checkout": {
+      "title": "Checkout with Appointment",
+      "description": "Checkout extended with appointment booking.",
+      "allOf": [
+        {
+          "$ref": "https://ucp.dev/schemas/shopping/checkout.json"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "appointment": {
+              "$ref": "#/$defs/appointment",
+              "description": "Appointment details.",
+              "ucp_request": {
+                "create": "optional",
+                "update": "optional",
+                "complete": "omit"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "com.viaschema.appointment": {
+      "platform_schema": {
+        "title": "Appointment Capability (Platform)",
+        "description": "Platform-level appointment capability configuration",
+        "allOf": [
+          {
+            "$ref": "https://ucp.dev/schemas/capability.json#/$defs/platform_schema"
+          },
+          {
+            "properties": {
+              "config": {
+                "type": "object",
+                "description": "Platform appointment configuration"
+              }
+            }
+          }
+        ]
+      },
+      "business_schema": {
+        "title": "Appointment Capability (Business)",
+        "description": "Business-level appointment capability configuration",
+        "allOf": [
+          {
+            "$ref": "https://ucp.dev/schemas/capability.json#/$defs/business_schema"
+          },
+          {
+            "properties": {
+              "config": {
+                "type": "object",
+                "description": "Business appointment configuration"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "embedded": {
+    "methods": [
+      {
+        "name": "ec.appointment.change",
+        "summary": "Appointment details changed",
+        "description": "Merchant notifies host that checkout.appointment has changed (slot selected, time updated).",
+        "params": [
+          {
+            "name": "checkout",
+            "required": true,
+            "schema": {
+              "$ref": "https://ucp.dev/schemas/shopping/checkout.json",
+              "description": "Current checkout state with updated appointment."
+            }
+          }
+        ]
+      },
+      {
+        "name": "ec.appointment.slot_selection_request",
+        "summary": "Request appointment slot selection",
+        "description": "Merchant requests host to present appointment slot selection UI.",
+        "params": [
+          {
+            "name": "checkout",
+            "required": true,
+            "schema": {
+              "$ref": "https://ucp.dev/schemas/shopping/checkout.json",
+              "description": "Current checkout state with appointment context."
+            }
+          }
+        ],
+        "result": {
+          "name": "slotSelectionResult",
+          "schema": {
+            "type": "object",
+            "description": "Checkout state with updated appointment slot selection.",
+            "required": ["checkout"],
+            "properties": {
+              "checkout": {
+                "type": "object",
+                "description": "Partial checkout update with appointment slot selection.",
+                "properties": {
+                  "appointment": {
+                    "$ref": "types/appointment.json",
+                    "description": "Appointment with updated selected_option_id."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

@@ -26,6 +26,13 @@
         "name": "dev.ucp.shopping.buyer_consent",
         "version": "2026-01-11",
         "extends": "dev.ucp.shopping.checkout"
+      },
+      {
+        "name": "com.viaschema.appointment",
+        "version": "2026-01-11",
+        "spec": "https://viaschema.com/specs/shopping/appointment",
+        "schema": "https://viaschema.com/schemas/shopping/appointment.json",
+        "extends": "dev.ucp.shopping.checkout"
       }
     ]
   },

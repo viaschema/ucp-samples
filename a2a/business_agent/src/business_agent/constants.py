@@ -12,8 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""UCP."""
+"""UCP constants and configuration."""
 
+import os
+
+# Square API configuration
+SQUARE_ACCESS_TOKEN = os.getenv("SQUARE_ACCESS_TOKEN", "")
+SQUARE_SANDBOX = os.getenv("SQUARE_SANDBOX", "true").lower() == "true"
+
+# ADK state keys
 ADK_USER_CHECKOUT_ID = "user:checkout_id"
 ADK_PAYMENT_STATE = "__payment_data__"
 ADK_UCP_METADATA_STATE = "__ucp_metadata__"
@@ -26,6 +33,8 @@ UCP_AGENT_HEADER = "UCP-Agent"
 UCP_FULFILLMENT_EXTENSION = "dev.ucp.shopping.fulfillment"
 UCP_BUYER_CONSENT_EXTENSION = "dev.ucp.shopping.buyer_consent"
 UCP_DISCOUNT_EXTENSION = "dev.ucp.shopping.discount"
+
+UCP_APPOINTMENT_EXTENSION = "com.viaschema.appointment"
 
 UCP_CHECKOUT_KEY = "a2a.ucp.checkout"
 UCP_PAYMENT_DATA_KEY = "a2a.ucp.checkout.payment_data"

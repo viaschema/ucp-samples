@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viaschema.com/schemas/shopping/types/staff.json",
+  "title": "Staff",
+  "description": "A staff member who provides services.",
+  "type": "object",
+  "required": ["id", "name"],
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique staff member identifier."
+    },
+    "name": {
+      "type": "string",
+      "description": "Full display name of the staff member."
+    },
+    "first_name": {
+      "type": "string",
+      "description": "First name of the staff member."
+    },
+    "last_name": {
+      "type": "string",
+      "description": "Last name of the staff member."
+    }
+  }
+}

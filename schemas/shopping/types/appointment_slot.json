@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viaschema.com/schemas/shopping/types/appointment_slot.json",
+  "title": "Appointment Slot",
+  "description": "A group of line items with appointment options.",
+  "type": "object",
+  "required": ["id", "line_item_ids"],
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Slot identifier for referencing in updates.",
+      "ucp_request": {"create": "omit", "update": "required"}
+    },
+    "line_item_ids": {
+      "type": "array",
+      "description": "Line item IDs included in this appointment slot.",
+      "items": { "type": "string" },
+      "ucp_request": "omit"
+    },
+    "location": {
+      "$ref": "https://ucp.dev/schemas/shopping/types/retail_location.json",
+      "description": "Location for the appointment.",
+      "ucp_request": "omit"
+    },
+    "options": {
+      "type": "array",
+      "description": "Available appointment time slots for this slot.",
+      "items": { "$ref": "appointment_option.json" },
+      "ucp_request": "omit"
+    },
+    "selected_option_id": {
+      "type": ["string", "null"],
+      "description": "ID of the selected appointment option for this slot."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional customer notes for the appointment."
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viaschema.com/schemas/shopping/types/appointment.json",
+  "title": "Appointment",
+  "description": "Container for appointment slots.",
+  "type": "object",
+  "ucp_shared_request": true,
+  "properties": {
+    "slots": {
+      "type": "array",
+      "description": "Appointment slots for line items.",
+      "items": { "$ref": "appointment_slot.json" }
+    }
+  }
+}
