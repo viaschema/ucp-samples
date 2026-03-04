@@ -35,7 +35,14 @@ UCP_BUYER_CONSENT_EXTENSION = "dev.ucp.shopping.buyer_consent"
 UCP_DISCOUNT_EXTENSION = "dev.ucp.shopping.discount"
 
 UCP_APPOINTMENT_EXTENSION = "com.viaschema.appointment"
+UCP_LENDING_EXTENSION = "com.viaschema.lending"
 
 UCP_CHECKOUT_KEY = "a2a.ucp.checkout"
 UCP_PAYMENT_DATA_KEY = "a2a.ucp.checkout.payment_data"
 UCP_RISK_SIGNALS_KEY = "a2a.ucp.checkout.risk_signals"
+
+# Lending / PII data keys
+ADK_PII_STATE = "__pii_data__"
+UCP_PII_DATA_KEY = "a2a.ucp.checkout.pii_data"
+UCP_PII_COLLECTION_KEY = "a2a.ucp.checkout.pii_collection"
+UCP_LOAN_APPLICATION_KEY = "a2a.ucp.checkout.loan_application"

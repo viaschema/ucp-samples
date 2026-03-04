@@ -57,7 +57,6 @@ const PaymentConfirmationComponent: React.FC<PaymentConfirmationProps> = ({
         {isConfirming ? (
           <>
             <svg
-              title="Processing"
               aria-label="Processing"
               role="img"
               className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"

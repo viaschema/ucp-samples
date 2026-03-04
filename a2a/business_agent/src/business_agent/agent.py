@@ -40,13 +40,14 @@ from .constants import (
     UCP_PAYMENT_DATA_KEY,
     UCP_RISK_SIGNALS_KEY,
 )
+from .dependencies import mpp, store
+from .lending_tools import (
+    get_pii_requirements,
+    search_lenders,
+    start_lending,
+    submit_loan_application,
+)
 from .models.appointment_types import AppointmentRequest
-from .payment_processor import MockPaymentProcessor
-from .store import ServiceStore
-
-
-store = ServiceStore()
-mpp = MockPaymentProcessor()
 
 
 def _create_error_response(message: str) -> dict:
@@ -127,17 +128,19 @@ def search_availability(
     tool_context: ToolContext,
     start_date: str,
     end_date: str,
-    location_id: str | None = None,
+    location_id: str,
     staff_id: str | None = None,
     service_variation_id: str | None = None,
 ) -> dict:
     """Search for available appointment slots within a date range.
 
+    A location_id is required. Use list_locations first to get one.
+
     Args:
         tool_context: The tool context for the current request.
         start_date: Start date in YYYY-MM-DD format.
         end_date: End date in YYYY-MM-DD format.
-        location_id: Optional location ID to filter by.
+        location_id: Location ID to search availability at (required).
         staff_id: Optional staff ID to filter by.
         service_variation_id: Optional service variation ID to filter by.
 
@@ -609,6 +612,8 @@ def after_tool_modifier(
         "a2a.staff",
         "a2a.availability_slots",
         "a2a.bookings",
+        "a2a.ucp.lending.lenders",
+        "a2a.ucp.lending.loan_offers",
     ]
     if UcpExtension.URI in extensions and any(
         key in tool_response for key in ucp_response_keys
@@ -646,14 +651,16 @@ root_agent = Agent(
     model="gemini-3-flash-preview",
     description="Agent to help with service booking and appointments",
     instruction=(
-        "You are a helpful agent for booking services and appointments. "
-        "You can help users with:\n"
+        "You are a helpful agent for booking services, appointments, and "
+        "applying for loans. You can help users with:\n"
         "- Searching for available services\n"
         "- Finding locations where services are offered\n"
         "- Checking staff availability\n"
         "- Finding available appointment times\n"
         "- Adding services to a checkout with appointment details\n"
-        "- Managing and modifying bookings\n\n"
+        "- Managing and modifying bookings\n"
+        "- Searching for lenders and comparing loan offers\n"
+        "- Applying for personal or car loans\n\n"
         "Workflow for booking a service:\n"
         "1. Search for services the user wants (search_shopping_catalog)\n"
         "2. List available locations (list_locations)\n"
@@ -661,6 +668,14 @@ root_agent = Agent(
         "4. Add the service to checkout with appointment details (add_to_checkout)\n"
         "5. Collect customer details (update_customer_details)\n"
         "6. Complete the checkout to confirm the booking (complete_checkout)\n\n"
+        "Workflow for loan application:\n"
+        "1. Search available lenders (search_lenders) with optional loan_type filter\n"
+        "2. Start the lending flow (start_lending) with the desired loan type\n"
+        "3. The frontend collects PII directly via the PII vault — the agent "
+        "never handles raw PII data.\n"
+        "4. Once PII is complete, the frontend handles PII token authorization.\n"
+        "5. Submit the loan application (submit_loan_application) to get offers "
+        "from ALL eligible lenders sorted by rate for easy comparison.\n\n"
         "When adding services to checkout, you can include appointment details "
         "(location_id, staff_id, start_time) directly in add_to_checkout, or "
         "use set_appointment later to schedule appointments for multiple services.\n\n"
@@ -689,6 +704,11 @@ root_agent = Agent(
         # Booking management
         get_bookings,
         cancel_booking,
+        # Lending
+        search_lenders,
+        get_pii_requirements,
+        start_lending,
+        submit_loan_application,
     ],
     after_tool_callback=after_tool_modifier,
     after_agent_callback=modify_output_after_agent,

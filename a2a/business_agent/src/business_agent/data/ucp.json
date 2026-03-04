@@ -30,6 +30,13 @@
         "spec": "https://viaschema.com/specs/shopping/appointment",
         "schema": "https://viaschema.com/schemas/shopping/appointment.json",
         "extends": "dev.ucp.shopping.checkout"
+      },
+      {
+        "name": "com.viaschema.lending",
+        "version": "2026-01-11",
+        "spec": "https://viaschema.com/specs/lending",
+        "schema": "https://viaschema.com/schemas/lending/lending.json",
+        "extends": "dev.ucp.shopping.checkout"
       }
     ]
   },
@@ -45,6 +52,19 @@
       ],
       "config": {
         "business_id": "1234567890"
+      }
+    }]
+  },
+  "pii": {
+    "handlers": [{
+      "id": "example_pii_provider",
+      "name": "example.pii.provider",
+      "version": "2026-01-11",
+      "spec": "https://pii.provider.example/specs/handlers/pii",
+      "config_schema": "https://pii.provider.example/specs/handlers/config.json",
+      "supported_loan_types": ["personal", "car"],
+      "config": {
+        "platform_id": "superstore_lending"
       }
     }]
   }

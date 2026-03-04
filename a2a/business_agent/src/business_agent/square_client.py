@@ -268,7 +268,7 @@ class SquareServiceClient:
         self,
         start_date: date,
         end_date: date,
-        location_id: str | None = None,
+        location_id: str,
         staff_id: str | None = None,
         service_variation_id: str | None = None,
     ) -> list[AvailabilitySlot]:
@@ -294,10 +294,8 @@ class SquareServiceClient:
 
         query_filter: dict = {
             "start_at_range": {"start_at": start_at, "end_at": end_at},
+            "location_id": location_id,
         }
-
-        if location_id:
-            query_filter["location_id"] = location_id
 
         if staff_id:
             query_filter["segment_filters"] = [

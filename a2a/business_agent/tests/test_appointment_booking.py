@@ -210,7 +210,7 @@ class TestServiceStore:
 
         start = date.today()
         end = date.today() + timedelta(days=7)
-        results = store.search_availability(start, end)
+        results = store.search_availability(start, end, location_id="LOC_TEST_001")
 
         assert len(results) == 1
         mock_square_client.search_availability.assert_called_once()
@@ -539,6 +539,7 @@ class TestAgentTools:
             mock_context,
             start_date=today.isoformat(),
             end_date=(today + timedelta(days=7)).isoformat(),
+            location_id="LOC_TEST_001",
         )
 
         assert "a2a.availability_slots" in result

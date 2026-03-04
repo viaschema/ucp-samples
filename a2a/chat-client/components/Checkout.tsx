@@ -71,7 +71,9 @@ const CheckoutComponent: React.FC<CheckoutProps> = ({
           </svg>
           {checkout.status === 'completed'
             ? 'Order Confirmed'
-            : 'Checkout Summary'}
+            : checkout.lending?.loan_type
+              ? 'Loan Application'
+              : 'Checkout Summary'}
         </h3>
         {checkout.order?.id && (
           <p className="border-b pt-3 pb-3 text-sm space-y-2">
@@ -140,10 +142,42 @@ const CheckoutComponent: React.FC<CheckoutProps> = ({
         {checkout.appointment && (
           <AppointmentDetails appointment={checkout.appointment} />
         )}
+        {checkout.lending?.loan_type && (
+          <div className="border-t mt-4 pt-3">
+            <div className="text-sm space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Loan Type</span>
+                <span className="text-gray-800 font-medium capitalize">
+                  {checkout.lending.loan_type}
+                </span>
+              </div>
+              {checkout.lending.lenders && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Available Lenders</span>
+                  <span className="text-gray-800 font-medium">
+                    {checkout.lending.lenders.length}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Status</span>
+                <span className="inline-block px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+                  {checkout.lending.status === 'pii_missing'
+                    ? 'Collecting Information'
+                    : checkout.lending.status === 'consent_needed'
+                      ? 'Authorization Required'
+                      : checkout.lending.status === 'offers_received'
+                        ? 'Offers Available'
+                        : checkout.lending.status ?? 'Processing'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
         <p className="text-xs text-gray-400 mt-3 text-center">
           Checkout ID: {checkout.id}
         </p>
-        {checkout.status !== 'completed' && (
+        {checkout.status !== 'completed' && !checkout.lending?.loan_type && (
           <div className="border-t mt-4 pt-4 flex justify-around items-center">
             {checkout.continue_url && (
               <a

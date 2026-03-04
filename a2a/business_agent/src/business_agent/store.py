@@ -53,6 +53,7 @@ from .models.appointment_types import (
     ServiceVariation,
     StaffResponse,
 )
+from .models.lending_types import LendingResponse, PIIHandler
 from .square_client import SquareServiceClient
 
 
@@ -96,6 +97,58 @@ class ServiceStore:
         ucp_path = base_path / "data" / "ucp.json"
         with ucp_path.open() as f:
             self._ucp_metadata = json.load(f)
+
+    @property
+    def ucp_metadata(self) -> dict:
+        """Return the loaded UCP metadata."""
+        return self._ucp_metadata
+
+    def save_checkout(
+        self, checkout_id: str, checkout: AppointmentCheckoutResponse
+    ) -> None:
+        """Save a checkout object by ID.
+
+        Args:
+            checkout_id: Checkout ID.
+            checkout: The checkout object to save.
+        """
+        self._checkouts[checkout_id] = checkout
+
+    def create_empty_checkout(
+        self, metadata: UcpMetadata
+    ) -> tuple[str, AppointmentCheckoutResponse]:
+        """Create an empty checkout with all extension fields initialized.
+
+        Args:
+            metadata: UCP metadata object.
+
+        Returns:
+            Tuple of (checkout_id, checkout).
+        """
+        checkout_type = get_checkout_type(metadata)
+        checkout_id = str(uuid4())
+        checkout = checkout_type(
+            id=checkout_id,
+            ucp=metadata,
+            line_items=[],
+            currency=DEFAULT_CURRENCY,
+            totals=[],
+            status="incomplete",
+            links=[],
+            payment=PaymentResponse(handlers=self._ucp_metadata["payment"]["handlers"]),
+            appointment=AppointmentResponse(slots=[]),
+            lending=LendingResponse(
+                handlers=[
+                    PIIHandler(**h)
+                    for h in self._ucp_metadata.get("pii", {}).get("handlers", [])
+                ],
+            )
+            if hasattr(checkout_type, "model_fields")
+            and "lending" in checkout_type.model_fields
+            else None,
+        )
+        self._checkouts[checkout_id] = checkout
+        return checkout_id, checkout
 
     # ---------- Service Catalog Operations ----------
 
@@ -172,7 +225,7 @@ class ServiceStore:
         self,
         start_date: date,
         end_date: date,
-        location_id: str | None = None,
+        location_id: str,
         staff_id: str | None = None,
         service_variation_id: str | None = None,
     ) -> list[AvailabilitySlot]:
@@ -256,23 +309,7 @@ class ServiceStore:
 
         # Get or create checkout
         if not checkout_id:
-            checkout_id = str(uuid4())
-            checkout_type = get_checkout_type(metadata)
-
-            # Ensure we get AppointmentCheckoutResponse
-            checkout = checkout_type(
-                id=checkout_id,
-                ucp=metadata,
-                line_items=[],
-                currency=DEFAULT_CURRENCY,
-                totals=[],
-                status="incomplete",
-                links=[],
-                payment=PaymentResponse(
-                    handlers=self._ucp_metadata["payment"]["handlers"]
-                ),
-                appointment=AppointmentResponse(slots=[]),
-            )
+            checkout_id, checkout = self.create_empty_checkout(metadata)
         else:
             checkout = self._checkouts.get(checkout_id)
             if not checkout:

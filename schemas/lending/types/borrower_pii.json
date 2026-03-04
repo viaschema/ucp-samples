@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viaschema.com/schemas/lending/types/borrower_pii.json",
+  "title": "Borrower PII",
+  "description": "Complete borrower PII model for lending applications. Composes UCP canonical Buyer fields (first_name, last_name, email, phone_number) with finance-specific fields. This schema defines what the PII vault stores — the agent never receives this data directly.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "first_name": {
+      "type": "string",
+      "description": "Borrower first name."
+    },
+    "last_name": {
+      "type": "string",
+      "description": "Borrower last name."
+    },
+    "full_name": {
+      "type": "string",
+      "description": "Borrower full display name."
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "Borrower email address."
+    },
+    "phone_number": {
+      "type": "string",
+      "description": "Borrower phone number (E.164 format)."
+    },
+    "address": {
+      "$ref": "https://ucp.dev/schemas/shopping/types/postal_address.json",
+      "description": "Borrower postal address."
+    },
+    "date_of_birth": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of birth (ISO 8601, e.g. 1990-01-15)."
+    },
+    "annual_income": {
+      "type": "string",
+      "description": "Annual income in dollars."
+    },
+    "living_situation": {
+      "type": "string",
+      "description": "Housing status.",
+      "enum": ["rent", "fully_own", "mortgage"]
+    },
+    "monthly_housing_payment": {
+      "type": "string",
+      "description": "Monthly housing cost in dollars."
+    },
+    "employment_status": {
+      "type": "string",
+      "description": "Employment status.",
+      "enum": ["employed", "self_employed", "unemployed", "retired"]
+    },
+    "employer_phone_number": {
+      "type": "string",
+      "description": "Employer phone number (E.164 format)."
+    },
+    "employer_address": {
+      "$ref": "https://ucp.dev/schemas/shopping/types/postal_address.json",
+      "description": "Employer postal address."
+    }
+  }
+}

@@ -27,9 +27,14 @@ import {
 import AvailabilitySlots from './AvailabilitySlots';
 import BookingCard from './BookingCard';
 import CheckoutComponent from './Checkout';
+import LenderCard from './LenderCard';
+import LoanOfferComparison from './LoanOfferComparison';
 import LocationCard from './LocationCard';
+import NonPIIForm from './NonPIIForm';
 import PaymentConfirmationComponent from './PaymentConfirmation';
 import PaymentMethodSelector from './PaymentMethodSelector';
+import PIICollectionForm from './PIICollectionForm';
+import PIIConsentSelector from './PIIConsentSelector';
 import ProductCard from './ProductCard';
 import ServiceCard from './ServiceCard';
 import UserLogo from './UserLogo';
@@ -45,6 +50,9 @@ interface ChatMessageProps {
   onConfirmPayment?: (paymentInstrument: PaymentInstrument) => void;
   onCompletePayment?: (checkout: Checkout) => void;
   isLastCheckout?: boolean;
+  onSelectPIIMethod?: (selectedMethod: string) => void;
+  onPIICollected?: (piiData: Record<string, string | Record<string, string>>) => void;
+  onSubmitNonPII?: (data: Record<string, string>) => void;
 }
 
 function TypingIndicator() {
@@ -78,6 +86,9 @@ function ChatMessageComponent({
   onConfirmPayment,
   onCompletePayment,
   isLastCheckout,
+  onSelectPIIMethod,
+  onPIICollected,
+  onSubmitNonPII,
 }: ChatMessageProps) {
   const isUser = message.sender === Sender.USER;
 
@@ -198,6 +209,48 @@ function ChatMessageComponent({
             checkout={message.checkout}
             onCheckout={isLastCheckout ? onCheckout : undefined}
             onCompletePayment={isLastCheckout ? onCompletePayment : undefined}
+          />
+        )}
+
+        {message.lenders && message.lenders.length > 0 && (
+          <div className="w-full my-1 overflow-x-auto">
+            <div className="flex space-x-4 p-2">
+              {message.lenders.map((lender) => (
+                <LenderCard
+                  key={lender.platform_id}
+                  lender={lender}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {message.loanOffers && message.loanOffers.length > 0 && (
+          <LoanOfferComparison offers={message.loanOffers} />
+        )}
+
+        {message.piiMethods && message.piiMethods.length > 0 && onSelectPIIMethod && (
+          <PIIConsentSelector
+            piiMethods={message.piiMethods}
+            lenderNames={message.piiLenderNames || []}
+            requiredFields={message.piiRequiredFields || []}
+            loanType={message.piiLoanType || 'personal'}
+            onSelect={onSelectPIIMethod}
+          />
+        )}
+
+        {message.piiCollectionFields && message.piiCollectionFields.length > 0 && onPIICollected && (
+          <PIICollectionForm
+            missingFields={message.piiCollectionFields}
+            onSubmit={onPIICollected}
+          />
+        )}
+
+        {message.nonPIIForm && onSubmitNonPII && (
+          <NonPIIForm
+            loanType={message.nonPIIForm.loan_type}
+            fields={message.nonPIIForm.fields}
+            onSubmit={onSubmitNonPII}
           />
         )}
       </div>

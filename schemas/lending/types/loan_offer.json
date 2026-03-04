@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viaschema.com/schemas/lending/types/loan_offer.json",
+  "title": "Loan Offer",
+  "description": "A loan offer from a lender, generated after PII authorization and application submission.",
+  "type": "object",
+  "required": ["lender_name", "rate", "amount", "term_months", "monthly_payment", "continue_url"],
+  "additionalProperties": true,
+  "properties": {
+    "lender_name": {
+      "type": "string",
+      "description": "Name of the lender making the offer."
+    },
+    "rate": {
+      "type": "number",
+      "description": "Annual interest rate (APR).",
+      "minimum": 0
+    },
+    "amount": {
+      "type": "number",
+      "description": "Loan amount in dollars.",
+      "minimum": 0
+    },
+    "term_months": {
+      "type": "integer",
+      "description": "Loan term in months.",
+      "minimum": 1
+    },
+    "monthly_payment": {
+      "type": "number",
+      "description": "Estimated monthly payment in dollars.",
+      "minimum": 0
+    },
+    "continue_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL to continue the application with the lender."
+    }
+  }
+}

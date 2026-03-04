@@ -35,8 +35,10 @@ from ..constants import (
     UCP_BUYER_CONSENT_EXTENSION,
     UCP_DISCOUNT_EXTENSION,
     UCP_FULFILLMENT_EXTENSION,
+    UCP_LENDING_EXTENSION,
 )
 from ..models.appointment_types import AppointmentCheckout
+from ..models.lending_types import LendingCheckout
 
 
 def get_checkout_type(ucp_metadata: UcpMetadata) -> type[Checkout]:
@@ -61,6 +63,8 @@ def get_checkout_type(ucp_metadata: UcpMetadata) -> type[Checkout]:
         selected_base_models.append(DiscountCheckout)
     if UCP_APPOINTMENT_EXTENSION in active_capability_names:
         selected_base_models.append(AppointmentCheckout)
+    if UCP_LENDING_EXTENSION in active_capability_names:
+        selected_base_models.append(LendingCheckout)
 
     if not selected_base_models:
         return Checkout
