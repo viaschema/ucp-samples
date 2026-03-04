@@ -27,7 +27,7 @@ In production, you'd replace this with your actual payment SDK (Stripe, Adyen, e
 
 <div align="center">
   <img src="../assets/diagrams/05_02_component_hierarchy.webp" alt="React Component Hierarchy" width="800">
-  <p><em>Figure 2: React component tree — App.tsx manages state and A2A messaging, with Header, ChatMessage, and ChatInput as children. ChatMessage contains UCP data components (green): ProductCard, Checkout, PaymentMethodSelector, and PaymentConfirmation.</em></p>
+  <p><em>Figure 2: React component tree — App.tsx manages state and A2A messaging, with Header, ChatMessage, and ChatInput as children. ChatMessage composes domain renderers: ShoppingRenderer (ProductCard, Checkout, PaymentMethodSelector), AppointmentRenderer (ServiceCard, LocationCard, AvailabilitySlots), and LendingRenderer (LenderCard, LoanOfferComparison, PIIConsentSelector).</em></p>
 </div>
 
 ## App.tsx - State & Handlers
@@ -85,27 +85,44 @@ fetch("/api", {
 
 ### Response Parsing
 
+Response parsing uses the `DomainResponseRegistry` instead of hard-coded if/else chains. Each domain registers `ResponseHandler` objects that map A2A data keys to `ChatMessage` properties:
+
 ```typescript
+import {registry} from './domains';
+
 const data = await response.json();
 
 // Extract context for next request
 setContextId(data.result?.contextId);
 
-// Parse response parts
+// Parse response parts via domain registry
 for (const part of data.result?.status?.message?.parts || []) {
   if (part.text) {
     message.text += part.text;
   }
-  if (part.data?.["a2a.product_results"]) {
-    message.products = part.data["a2a.product_results"].results;
-  }
-  if (part.data?.["a2a.ucp.checkout"]) {
-    message.checkout = part.data["a2a.ucp.checkout"];
+  if (part.data) {
+    // Registry handles all domain-specific data keys automatically
+    const parsed = registry.parseDataPart(part.data);
+    Object.assign(message, parsed);
   }
 }
 ```
 
+Adding a new domain's response keys only requires registering handlers in `domains/index.ts` — no changes to `App.tsx` parsing logic.
+
 ## Key Components
+
+### Domain Renderers
+
+`ChatMessage.tsx` composes domain-specific renderers instead of inlining all conditionals:
+
+| Renderer | Domain | Components Used |
+|----------|--------|----------------|
+| `ShoppingRenderer` | Shopping | ProductCard, Checkout, PaymentMethodSelector, PaymentConfirmation |
+| `AppointmentRenderer` | Appointments | ServiceCard, LocationCard, AvailabilitySlots, BookingCard |
+| `LendingRenderer` | Lending | LenderCard, LoanOfferComparison, PIIConsentSelector, PIICollectionForm, NonPIIForm |
+
+### Shared Components
 
 | Component | Props | Renders |
 |-----------|-------|---------|
@@ -113,7 +130,7 @@ for (const part of data.result?.status?.message?.parts || []) {
 | `Checkout` | `checkout`, `onCheckout`, `onCompletePayment` | Line items, totals, action buttons |
 | `PaymentMethodSelector` | `paymentMethods`, `onSelect` | Radio list of methods |
 | `PaymentConfirmation` | `paymentInstrument`, `onConfirm` | Confirm button |
-| `ChatMessage` | `message`, handlers | Combines all above based on data |
+| `ChatMessage` | `message`, handlers | Composes domain renderers |
 
 ## Types (types.ts)
 
@@ -122,12 +139,25 @@ interface ChatMessage {
   id: string;
   sender: Sender;          // USER | MODEL
   text: string;
-  products?: Product[];
   isLoading?: boolean;
-  paymentMethods?: PaymentMethod[];
   isUserAction?: boolean;
+  // Shopping domain
+  products?: Product[];
   checkout?: Checkout;
+  paymentMethods?: PaymentMethod[];
   paymentInstrument?: PaymentInstrument;
+  // Appointment domain
+  services?: ServiceVariation[];
+  locations?: Location[];
+  staff?: StaffMember[];
+  availabilitySlots?: AvailabilitySlot[];
+  bookings?: Booking[];
+  // Lending domain
+  lenders?: Lender[];
+  loanOffers?: LoanOffer[];
+  piiMethods?: string[];
+  piiCollectionFields?: string[];
+  nonPIIForm?: NonPIIFormData;
 }
 
 interface Checkout {

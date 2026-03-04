@@ -2,33 +2,43 @@
 
 ## TL;DR
 
-- **Agent**: Gemini 3.0 Flash with 8 shopping tools
+- **Agent**: Gemini 3.0 Flash with domain-registered tools (shopping, appointments, lending)
+- **Domain Modules**: Each domain provides tools, instructions, checkout mixins, and response data keys
 - **Tools**: Access `ToolContext` for state, return dict with UCP keys
 - **Callbacks**: `after_tool_callback` captures results, `after_agent_callback` formats output
 
 ## Agent Configuration
 
+Tools and instructions are assembled from domain modules via the `DomainRegistry`:
+
 ```python
-# agent.py:437
+# agent.py
+from .domains import DomainRegistry
+from .domains.shopping import ShoppingDomain
+from .domains.appointments import AppointmentDomain
+from .domains.lending import LendingDomain
+
+def _build_registry() -> DomainRegistry:
+    registry = DomainRegistry()
+    registry.register(ShoppingDomain())
+    registry.register(AppointmentDomain())
+    registry.register(LendingDomain())
+    return registry
+
+domain_registry = _build_registry()
+
 root_agent = Agent(
     name="shopper_agent",
     model="gemini-3-flash-preview",
     description="Agent to help with shopping",
-    instruction="You are a helpful agent who can help user with shopping...",
-    tools=[
-        search_shopping_catalog,
-        add_to_checkout,
-        remove_from_checkout,
-        update_checkout,
-        get_checkout,
-        start_payment,
-        update_customer_details,
-        complete_checkout,
-    ],
+    instruction=domain_registry.combined_instructions,
+    tools=domain_registry.all_tools,
     after_tool_callback=after_tool_modifier,
     after_agent_callback=modify_output_after_agent,
 )
 ```
+
+See [Domain Module Pattern](./10-domain-module-pattern.md) for the full architecture guide.
 
 ## Tool Pattern
 
@@ -38,9 +48,9 @@ Every tool follows this pattern:
 def tool_function(tool_context: ToolContext, param: str) -> dict:
     """Docstring visible to LLM for reasoning."""
 
-    # 1. Get state
-    checkout_id = tool_context.state.get(ADK_USER_CHECKOUT_ID)
-    metadata = tool_context.state.get(ADK_UCP_METADATA_STATE)
+    # 1. Get state (namespaced keys or flat aliases)
+    checkout_id = tool_context.state.get(CoreKeys.CHECKOUT_ID)  # or ADK_USER_CHECKOUT_ID
+    metadata = tool_context.state.get(CoreKeys.UCP_METADATA)    # or ADK_UCP_METADATA_STATE
 
     # 2. Validate
     if not metadata:
@@ -59,18 +69,40 @@ def tool_function(tool_context: ToolContext, param: str) -> dict:
     return {UCP_CHECKOUT_KEY: result.model_dump(mode="json")}
 ```
 
-## All 8 Tools
+## Tools by Domain
 
-| Tool | Line | Purpose | State Access |
-|------|------|---------|--------------|
-| `search_shopping_catalog` | 51 | Search products | Read metadata |
-| `add_to_checkout` | 73 | Add item to cart | Read/write checkout_id |
-| `remove_from_checkout` | 115 | Remove item | Read checkout_id |
-| `update_checkout` | 151 | Update quantity | Read checkout_id |
-| `get_checkout` | 187 | Get current state | Read checkout_id |
-| `update_customer_details` | 212 | Set buyer/address | Read checkout_id |
-| `start_payment` | 340 | Begin payment flow | Read checkout_id |
-| `complete_checkout` | 270 | Finalize order | Read checkout_id, payment |
+### Shopping (`domains/shopping.py`)
+
+| Tool | Purpose | State Access |
+|------|---------|--------------|
+| `search_shopping_catalog` | Search products | Read metadata |
+| `add_to_checkout` | Add item to cart | Read/write checkout_id |
+| `remove_from_checkout` | Remove item | Read checkout_id |
+| `update_checkout` | Update quantity | Read checkout_id |
+| `get_checkout` | Get current state | Read checkout_id |
+| `update_customer_details` | Set buyer/address | Read checkout_id |
+| `start_payment` | Begin payment flow | Read checkout_id |
+| `complete_checkout` | Finalize order | Read checkout_id, payment |
+
+### Appointments (`domains/appointments.py`)
+
+| Tool | Purpose | State Access |
+|------|---------|--------------|
+| `list_locations` | List salon locations | Read metadata |
+| `list_staff` | List staff members | Read metadata |
+| `search_availability` | Find available slots | Read metadata |
+| `set_appointment` | Schedule appointment | Read checkout_id |
+| `get_bookings` | View existing bookings | Read metadata |
+| `cancel_booking` | Cancel a booking | Read metadata |
+
+### Lending (`domains/lending.py`)
+
+| Tool | Purpose | State Access |
+|------|---------|--------------|
+| `search_lenders` | Find lenders by loan type | Read metadata |
+| `get_pii_requirements` | Check PII status | Read checkout_id |
+| `start_lending` | Begin loan application | Read checkout_id |
+| `submit_loan_application` | Submit to lenders | Read checkout_id, PII state |
 
 ## Tool Execution Flow
 
@@ -123,7 +155,7 @@ With callbacks:
 Captures UCP data from tool results for later use:
 
 ```python
-# agent.py:379
+# agent.py
 def after_tool_modifier(
     tool: BaseTool,
     args: dict[str, Any],
@@ -132,7 +164,8 @@ def after_tool_modifier(
 ) -> dict | None:
     """Stores UCP responses in state for output transformation."""
     extensions = tool_context.state.get(ADK_EXTENSIONS_STATE_KEY, [])
-    ucp_response_keys = [UCP_CHECKOUT_KEY, "a2a.product_results"]
+    # Response keys are registered by each domain module
+    ucp_response_keys = domain_registry.all_response_data_keys
 
     # Only capture if UCP extension is active
     if UcpExtension.URI in extensions and any(
@@ -142,6 +175,8 @@ def after_tool_modifier(
 
     return None  # Don't modify the response
 ```
+
+The `domain_registry.all_response_data_keys` aggregates keys from all domains, so new domains automatically have their response data captured without modifying this callback.
 
 ### after_agent_callback
 
@@ -175,13 +210,28 @@ def modify_output_after_agent(
 
 ### State Keys
 
+State keys are organized into namespaced classes per domain. Flat aliases are maintained for backward compatibility:
+
 ```python
-# constants.py
-ADK_USER_CHECKOUT_ID = "user:checkout_id"      # Checkout session ID
-ADK_PAYMENT_STATE = "__payment_data__"          # Payment instrument
-ADK_UCP_METADATA_STATE = "__ucp_metadata__"     # Capabilities
-ADK_EXTENSIONS_STATE_KEY = "__session_extensions__"
-ADK_LATEST_TOOL_RESULT = "temp:LATEST_TOOL_RESULT"
+# constants.py — namespaced classes
+class CoreKeys:
+    CHECKOUT_ID = "user:checkout_id"
+    UCP_METADATA = "__ucp_metadata__"
+    EXTENSIONS = "__session_extensions__"
+    LATEST_TOOL_RESULT = "temp:LATEST_TOOL_RESULT"
+
+class ShoppingKeys:
+    PAYMENT_STATE = "__payment_data__"
+    CHECKOUT = "a2a.ucp.checkout"
+
+class LendingKeys:
+    PII_STATE = "__pii_data__"
+    PII_DATA = "a2a.ucp.checkout.pii_data"
+
+# Flat aliases (backward compat)
+ADK_USER_CHECKOUT_ID = CoreKeys.CHECKOUT_ID
+ADK_PAYMENT_STATE = ShoppingKeys.PAYMENT_STATE
+ADK_UCP_METADATA_STATE = CoreKeys.UCP_METADATA
 ```
 
 ### State Flow
@@ -235,26 +285,20 @@ class ADKAgentExecutor:
 
 ## Prompt Engineering
 
-### Current System Instruction
+### Combined System Instruction
 
-The agent uses a single instruction (`agent.py:441-454`):
+The agent instruction is composed from all registered domain modules via `domain_registry.combined_instructions`. Each domain contributes its own workflow instructions:
 
 ```python
-instruction=(
-    "You are a helpful agent who can help user with shopping actions such"
-    " as searching the catalog, add to checkout session, complete checkout"
-    " and handle order placed event. Given the user ask, plan ahead and"
-    " invoke the tools available to complete the user's ask. Always make"
-    " sure you have completed all aspects of the user's ask. If the user"
-    " says add to my list or remove from the list, add or remove from the"
-    " cart, add the product or remove the product from the checkout"
-    " session. If the user asks to add any items to the checkout session,"
-    " search for the products and then add the matching products to"
-    " checkout session. If the user asks to replace products,"
-    " use remove_from_checkout and add_to_checkout tools to replace the"
-    " products to match the user request"
-)
+# Composed automatically from domain modules:
+# 1. ShoppingDomain.agent_instructions — catalog search, checkout, payment
+# 2. AppointmentDomain.agent_instructions — locations, staff, availability, bookings
+# 3. LendingDomain.agent_instructions — lender search, PII collection, loan applications
+
+instruction=domain_registry.combined_instructions
 ```
+
+This means adding a new domain automatically extends the agent's instruction without editing `agent.py`.
 
 ### Improving the Instruction
 
@@ -301,7 +345,7 @@ ERROR HANDLING:
 | Gemini 3.0 Flash | Tool-heavy agents (this sample) | Fastest, 99% tool accuracy |
 | Gemini 2.0 Pro | Complex reasoning, ambiguous queries | Slower, better nuanced understanding |
 
-To change the model, edit `agent.py:437`:
+To change the model, edit the `root_agent` in `agent.py`:
 
 ```python
 root_agent = Agent(
@@ -337,22 +381,29 @@ def search_shopping_catalog(tool_context: ToolContext, query: str) -> dict:
 
 ## Adding a New Tool
 
-1. **Define function** with `ToolContext` parameter:
+Tools are now organized into domain modules. To add a tool:
+
+1. **Add to an existing domain** (if it belongs to shopping, appointments, or lending):
 
 ```python
+# domains/shopping.py — add the function, then include in ShoppingDomain.tools
 def my_new_tool(tool_context: ToolContext, param: str) -> dict:
     """Description for LLM reasoning."""
-    # Implementation
     return {UCP_CHECKOUT_KEY: result.model_dump(mode="json")}
 ```
 
-2. **Add to agent**:
+2. **Or create a new domain module** (see [Domain Module Pattern](./10-domain-module-pattern.md)):
 
 ```python
-root_agent = Agent(
-    ...
-    tools=[...existing..., my_new_tool],
-)
+# domains/my_domain.py
+class MyDomain(DomainModule):
+    @property
+    def tools(self) -> list:
+        return [my_new_tool]
+    # ... other properties
+
+# agent.py — register in _build_registry()
+registry.register(MyDomain())
 ```
 
-3. **Update instruction** if needed to guide LLM usage.
+The tool is automatically included in the agent's tool list and its response keys are captured by callbacks — no need to edit `agent.py` tool lists or callback logic.

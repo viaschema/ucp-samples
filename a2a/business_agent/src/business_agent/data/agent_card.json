@@ -26,6 +26,13 @@
               "spec": "https://ucp.dev/specs/shopping/discount",
               "schema": "https://ucp.dev/schemas/shopping/discount.json",
               "extends": "dev.ucp.shopping.checkout"
+            },
+            {
+              "name": "com.viaschema.lending",
+              "version": "2026-01-11",
+              "spec": "https://viaschema.com/specs/lending",
+              "schema": "https://viaschema.com/schemas/lending/lending.json",
+              "extends": "dev.ucp.shopping.checkout"
             }
           ]
         }
@@ -76,6 +83,21 @@
       "name": "Checkout",
       "tags": [
         "checkout"
+      ]
+    },
+    {
+      "description": "Helps users find lenders and apply for loans with PII protection",
+      "examples": [
+        "I want to apply for a personal loan",
+        "Show me car loan options",
+        "Compare loan rates from different lenders"
+      ],
+      "id": "lending",
+      "name": "Loan Application",
+      "tags": [
+        "lending",
+        "loan",
+        "finance"
       ]
     }
   ],

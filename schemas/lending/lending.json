@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viaschema.com/schemas/lending/lending.json",
+  "name": "com.viaschema.lending",
+  "title": "Lending Extension",
+  "description": "Extends Checkout with loan application support including PII collection via trusted third-party providers, multi-lender comparison, and offer generation.",
+  "$defs": {
+    "pii_credential": {
+      "$ref": "types/pii_credential.json"
+    },
+    "pii_consent": {
+      "$ref": "types/pii_consent.json"
+    },
+    "pii_instrument": {
+      "$ref": "types/pii_instrument.json"
+    },
+    "pii_handler": {
+      "$ref": "types/pii_handler.json"
+    },
+    "lender": {
+      "$ref": "types/lender.json"
+    },
+    "loan_offer": {
+      "$ref": "types/loan_offer.json"
+    },
+    "borrower_pii": {
+      "$ref": "types/borrower_pii.json"
+    },
+    "lending_response": {
+      "$ref": "types/lending_response.json"
+    },
+    "dev.ucp.shopping.checkout": {
+      "title": "Checkout with Lending",
+      "description": "Checkout extended with loan application support.",
+      "allOf": [
+        {
+          "$ref": "https://ucp.dev/schemas/shopping/checkout.json"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "lending": {
+              "$ref": "#/$defs/lending_response",
+              "description": "Lending application details.",
+              "ucp_request": {
+                "create": "optional",
+                "update": "optional",
+                "complete": "omit"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "com.viaschema.lending": {
+      "platform_schema": {
+        "title": "Lending Capability (Platform)",
+        "description": "Platform-level lending capability configuration.",
+        "allOf": [
+          {
+            "$ref": "https://ucp.dev/schemas/capability.json#/$defs/platform_schema"
+          },
+          {
+            "properties": {
+              "config": {
+                "type": "object",
+                "description": "Platform lending configuration."
+              }
+            }
+          }
+        ]
+      },
+      "business_schema": {
+        "title": "Lending Capability (Business)",
+        "description": "Business-level lending capability configuration.",
+        "allOf": [
+          {
+            "$ref": "https://ucp.dev/schemas/capability.json#/$defs/business_schema"
+          },
+          {
+            "properties": {
+              "config": {
+                "type": "object",
+                "description": "Business lending configuration."
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "embedded": {
+    "methods": [
+      {
+        "name": "ec.lending.pii_collection_request",
+        "summary": "Request PII collection from the user",
+        "description": "Merchant requests the host to present the PII collection UI. The host collects PII directly via the PII vault — the agent never handles raw PII data.",
+        "params": [
+          {
+            "name": "checkout",
+            "required": true,
+            "schema": {
+              "$ref": "https://ucp.dev/schemas/shopping/checkout.json",
+              "description": "Current checkout state with lending context including required_pii_fields and handlers."
+            }
+          }
+        ],
+        "result": {
+          "name": "piiCollectionResult",
+          "schema": {
+            "type": "object",
+            "description": "Result of PII collection. The host stores PII in the vault and returns field status.",
+            "required": ["checkout"],
+            "properties": {
+              "checkout": {
+                "type": "object",
+                "description": "Partial checkout update with updated lending status.",
+                "properties": {
+                  "lending": {
+                    "$ref": "types/lending_response.json",
+                    "description": "Lending state with updated missing_pii_fields and status."
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "ec.lending.pii_consent_request",
+        "summary": "Request PII consent from the user",
+        "description": "Merchant requests the host to present the PII consent UI. The user reviews which PII fields will be shared and with which lenders, then provides formal consent. The host sends the consent to the PII vault which validates it and mints platform-scoped tokens.",
+        "params": [
+          {
+            "name": "checkout",
+            "required": true,
+            "schema": {
+              "$ref": "https://ucp.dev/schemas/shopping/checkout.json",
+              "description": "Current checkout state with lending context including handlers, lenders, and required fields."
+            }
+          }
+        ],
+        "result": {
+          "name": "piiConsentResult",
+          "schema": {
+            "type": "object",
+            "description": "Result of PII consent. Contains the platform-scoped PII instruments minted by the vault.",
+            "required": ["pii_data"],
+            "properties": {
+              "pii_data": {
+                "type": "array",
+                "description": "PII instruments with platform-scoped tokens, one per authorized lender.",
+                "items": {
+                  "$ref": "types/pii_instrument.json"
+                }
+              },
+              "pii_collection": {
+                "$ref": "types/pii_consent.json",
+                "description": "The formal consent record that was submitted to the vault."
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "ec.lending.offers_received",
+        "summary": "Loan offers received",
+        "description": "Merchant notifies the host that loan offers have been received from lenders and the checkout has been updated.",
+        "params": [
+          {
+            "name": "checkout",
+            "required": true,
+            "schema": {
+              "$ref": "https://ucp.dev/schemas/shopping/checkout.json",
+              "description": "Current checkout state with lending.offers populated."
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

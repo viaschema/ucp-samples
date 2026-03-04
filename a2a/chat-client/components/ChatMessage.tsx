@@ -15,23 +15,19 @@
  */
 import {appConfig} from '@/config';
 import {
+  AppointmentRenderer,
+  LendingRenderer,
+  ShoppingRenderer,
+} from '../domains';
+import {
   type AvailabilitySlot,
   type ChatMessage,
   type Checkout,
-  type Location,
   type PaymentInstrument,
   type Product,
   Sender,
   type ServiceVariation,
 } from '../types';
-import AvailabilitySlots from './AvailabilitySlots';
-import BookingCard from './BookingCard';
-import CheckoutComponent from './Checkout';
-import LocationCard from './LocationCard';
-import PaymentConfirmationComponent from './PaymentConfirmation';
-import PaymentMethodSelector from './PaymentMethodSelector';
-import ProductCard from './ProductCard';
-import ServiceCard from './ServiceCard';
 import UserLogo from './UserLogo';
 
 interface ChatMessageProps {
@@ -45,6 +41,9 @@ interface ChatMessageProps {
   onConfirmPayment?: (paymentInstrument: PaymentInstrument) => void;
   onCompletePayment?: (checkout: Checkout) => void;
   isLastCheckout?: boolean;
+  onSelectPIIMethod?: (selectedMethod: string) => void;
+  onPIICollected?: (piiData: Record<string, string | Record<string, string>>) => void;
+  onSubmitNonPII?: (data: Record<string, string>) => void;
 }
 
 function TypingIndicator() {
@@ -78,6 +77,9 @@ function ChatMessageComponent({
   onConfirmPayment,
   onCompletePayment,
   isLastCheckout,
+  onSelectPIIMethod,
+  onPIICollected,
+  onSubmitNonPII,
 }: ChatMessageProps) {
   const isUser = message.sender === Sender.USER;
 
@@ -120,86 +122,30 @@ function ChatMessageComponent({
           </div>
         )}
 
-        {message.paymentMethods && onSelectPaymentMethod && (
-          <PaymentMethodSelector
-            paymentMethods={message.paymentMethods}
-            onSelect={onSelectPaymentMethod}
-          />
-        )}
+        {/* Domain renderers — each domain handles its own content */}
+        <ShoppingRenderer
+          message={message}
+          onAddToCart={onAddToCart}
+          onCheckout={isLastCheckout ? onCheckout : undefined}
+          onCompletePayment={isLastCheckout ? onCompletePayment : undefined}
+          onSelectPaymentMethod={onSelectPaymentMethod}
+          onConfirmPayment={onConfirmPayment}
+          isLastCheckout={isLastCheckout}
+        />
 
-        {message.paymentInstrument && onConfirmPayment && (
-          <PaymentConfirmationComponent
-            paymentInstrument={message.paymentInstrument}
-            onConfirm={() => onConfirmPayment(message.paymentInstrument)}
-          />
-        )}
+        <AppointmentRenderer
+          message={message}
+          onAddServiceToCheckout={onAddServiceToCheckout}
+          onSelectLocation={onSelectLocation}
+          onSelectTimeSlot={onSelectTimeSlot}
+        />
 
-        {message.products && message.products.length > 0 && (
-          <div className="w-full my-1 overflow-x-auto">
-            <div className="flex space-x-4 p-2">
-              {message.products.map((product) => (
-                <ProductCard
-                  key={product.productID}
-                  product={product}
-                  onAddToCart={onAddToCart}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {message.services && message.services.length > 0 && (
-          <div className="w-full my-1 overflow-x-auto">
-            <div className="flex space-x-4 p-2">
-              {message.services.map((service) => (
-                <ServiceCard
-                  key={service.id}
-                  service={service}
-                  onAddToCheckout={onAddServiceToCheckout}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {message.locations && message.locations.length > 0 && (
-          <div className="w-full my-1 overflow-x-auto">
-            <div className="flex space-x-4 p-2">
-              {message.locations.map((location) => (
-                <LocationCard
-                  key={location.id}
-                  location={location}
-                  onSelect={onSelectLocation}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {message.availabilitySlots && message.availabilitySlots.length > 0 && (
-          <div className="w-full my-1">
-            <AvailabilitySlots
-              slots={message.availabilitySlots}
-              onSelectSlot={onSelectTimeSlot}
-            />
-          </div>
-        )}
-
-        {message.bookings && message.bookings.length > 0 && (
-          <div className="w-full my-1 space-y-4">
-            {message.bookings.map((booking) => (
-              <BookingCard key={booking.id} booking={booking} />
-            ))}
-          </div>
-        )}
-
-        {message.checkout && (
-          <CheckoutComponent
-            checkout={message.checkout}
-            onCheckout={isLastCheckout ? onCheckout : undefined}
-            onCompletePayment={isLastCheckout ? onCompletePayment : undefined}
-          />
-        )}
+        <LendingRenderer
+          message={message}
+          onSelectPIIMethod={onSelectPIIMethod}
+          onPIICollected={onPIICollected}
+          onSubmitNonPII={onSubmitNonPII}
+        />
       </div>
     </div>
   );

@@ -27,6 +27,13 @@ from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentCard
 import click
 from dotenv import load_dotenv
+
+# load_dotenv() MUST run before importing agent/store modules, because
+# constants.py reads SQUARE_ACCESS_TOKEN at import time.  If the env
+# var isn't set yet the Square client is initialised with an empty token
+# and all service-catalog searches silently return [].
+load_dotenv()
+
 from starlette.applications import Starlette
 from starlette.responses import FileResponse
 from starlette.routing import Mount, Route
@@ -35,8 +42,8 @@ import uvicorn
 
 from .agent import root_agent as business_agent
 from .agent_executor import ADKAgentExecutor
-
-load_dotenv()
+from .lending_tools import pii_provider
+from .pii_provider import create_pii_vault_routes
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -113,6 +120,7 @@ async def run(host, port):
                 app=StaticFiles(directory=str(base_path / "data" / "images")),
                 name="images",
             ),
+            *create_pii_vault_routes(pii_provider),
         ]
     )
     app = Starlette(routes=routes)

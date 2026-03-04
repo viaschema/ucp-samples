@@ -19,11 +19,17 @@ import ChatMessageComponent from './components/ChatMessage';
 import Header from './components/Header';
 import {appConfig} from './config';
 import {CredentialProviderProxy} from './mocks/credentialProviderProxy';
+import {PIIProviderProxy} from './mocks/piiProviderProxy';
+
+import {registry} from './domains';
 
 import {
   type AvailabilitySlot,
   type ChatMessage,
   type Checkout,
+  type PIIConsent,
+  type PIIHandler,
+  type PIIInstrument,
   type PaymentHandler,
   type PaymentInstrument,
   type Product,
@@ -65,6 +71,8 @@ function App() {
   const [contextId, setContextId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
   const credentialProvider = useRef(new CredentialProviderProxy());
+  const piiProvider = useRef(new PIIProviderProxy());
+  const pendingPIIInstruments = useRef<PIIInstrument[] | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Scroll to the bottom when new messages are added
@@ -73,6 +81,19 @@ function App() {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop =
         chatContainerRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  // Auto-trigger PII flow when a lending checkout arrives
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Trigger PII flow on new messages
+  useEffect(() => {
+    const lastMsg = messages[messages.length - 1];
+    const lendingStatus = lastMsg?.checkout?.lending?.status;
+    if (
+      (lendingStatus === 'consent_needed' || lendingStatus === 'pii_missing') &&
+      !isLoading
+    ) {
+      handlePIIMethodSelection(lastMsg.checkout);
     }
   }, [messages]);
 
@@ -245,6 +266,226 @@ function App() {
     }
   };
 
+  const handlePIIMethodSelection = async (checkout: Checkout) => {
+    if (!checkout?.lending?.handlers) {
+      const errorMessage = createChatMessage(
+        Sender.MODEL,
+        "Sorry, I couldn't retrieve PII handlers.",
+      );
+      setMessages((prev) => [...prev, errorMessage]);
+      return;
+    }
+
+    const handler = checkout.lending.handlers.find(
+      (h: PIIHandler) => h.id === 'example_pii_provider',
+    );
+    if (!handler) {
+      const errorMessage = createChatMessage(
+        Sender.MODEL,
+        "Sorry, I couldn't find the supported PII handler.",
+      );
+      setMessages((prev) => [...prev, errorMessage]);
+      return;
+    }
+
+    try {
+      // Use the backend's missing_pii_fields as the source of truth.
+      // The backend tracks what PII it has received; the frontend vault
+      // may have data the backend hasn't seen yet.
+      const backendMissing = checkout.lending.missing_pii_fields || [];
+
+      if (backendMissing.length > 0) {
+        // Path B: Backend says fields are missing - show collection form
+        const collectionMessage = createChatMessage(
+          Sender.MODEL,
+          'Some personal information is missing. Please fill in the required fields below.',
+          {piiCollectionFields: backendMissing},
+        );
+        setMessages((prev) => [...prev, collectionMessage]);
+      } else {
+        // Path A: Backend has all PII, get consent from the frontend vault
+        const response = await piiProvider.current.getStoredPIIFields(
+          user_email,
+          handler.config || {},
+        );
+        const piiMethods = response.pii_methods;
+        const lenders = checkout.lending.lenders || [];
+        const piiSelectorMessage = createChatMessage(Sender.MODEL, '', {
+          piiMethods,
+          piiLenderNames: lenders.map((l) => l.lender_name),
+          piiRequiredFields: checkout.lending.required_pii_fields || [],
+          piiLoanType: checkout.lending.loan_type || 'personal',
+        });
+        setMessages((prev) => [...prev, piiSelectorMessage]);
+      }
+    } catch (error) {
+      console.error('Failed to get PII methods:', error);
+      const errorMessage = createChatMessage(
+        Sender.MODEL,
+        "Sorry, I couldn't retrieve PII information.",
+      );
+      setMessages((prev) => [...prev, errorMessage]);
+    }
+  };
+
+  const handlePIICollected = async (piiData: Record<string, string | Record<string, string>>) => {
+    // Hide the collection form
+    setMessages((prev) => prev.filter((msg) => !msg.piiCollectionFields));
+
+    const userActionMessage = createChatMessage(
+      Sender.USER,
+      'User submitted personal information.',
+      {isUserAction: true},
+    );
+    setMessages((prev) => [...prev, userActionMessage]);
+
+    try {
+      if (!user_email) throw new Error('User email is not set.');
+
+      // Store PII with the provider
+      await piiProvider.current.storePII(user_email, piiData);
+
+      // Now get PII methods (should have all fields stored)
+      const piiResponse = await piiProvider.current.getStoredPIIFields(
+        user_email,
+        {},
+      );
+
+      const lastCheckoutMsg = [...messages].reverse().find((m) => m.checkout?.lending);
+      const lenders = lastCheckoutMsg?.checkout?.lending?.lenders || [];
+
+      const piiSelectorMessage = createChatMessage(Sender.MODEL, '', {
+        piiMethods: piiResponse.pii_methods,
+        piiLenderNames: lenders.map((l) => l.lender_name),
+        piiRequiredFields: lastCheckoutMsg?.checkout?.lending?.required_pii_fields || [],
+        piiLoanType: lastCheckoutMsg?.checkout?.lending?.loan_type || 'personal',
+      });
+      setMessages((prev) => [...prev, piiSelectorMessage]);
+    } catch (error) {
+      console.error('Failed to store PII:', error);
+      const errorMessage = createChatMessage(
+        Sender.MODEL,
+        "Sorry, I couldn't store your information. Please try again.",
+      );
+      setMessages((prev) => [...prev, errorMessage]);
+    }
+  };
+
+  const handlePIIMethodSelected = async (selectedMethodId: string) => {
+    // Hide the PII selector
+    setMessages((prev) => prev.filter((msg) => !msg.piiMethods));
+
+    const userActionMessage = createChatMessage(
+      Sender.USER,
+      'User authorized PII sharing.',
+      {isUserAction: true},
+    );
+    setMessages((prev) => [...prev, userActionMessage]);
+
+    try {
+      if (!user_email) throw new Error('User email is not set.');
+
+      // Build a formal PIIConsent from the checkout context
+      const lastCheckoutMsg = [...messages].reverse().find((m) => m.checkout?.lending);
+      const lending = lastCheckoutMsg?.checkout?.lending;
+      const lenders = lending?.lenders || [];
+
+      const consent: PIIConsent = {
+        pii_method_id: selectedMethodId,
+        handler_id: 'example_pii_provider',
+        fields_consented: lending?.required_pii_fields || [],
+        loan_type: lending?.loan_type || 'personal',
+        platform_ids: lenders.map((l) => l.platform_id),
+        consented_at: new Date().toISOString(),
+      };
+
+      // Submit formal consent to the PII vault — it validates, records, and mints tokens
+      const {instruments} = await piiProvider.current.submitConsent(
+        user_email,
+        consent,
+      );
+
+      if (!instruments.length || !instruments[0]?.credential) {
+        throw new Error('Failed to retrieve PII credentials');
+      }
+
+      // Proceed to non-PII form or submit
+      const nonPIIFields = lending?.required_non_pii_fields || [];
+      const loanType = lending?.loan_type || 'personal';
+
+      if (nonPIIFields.length > 0) {
+        pendingPIIInstruments.current = instruments;
+        const nonPIIFormMessage = createChatMessage(Sender.MODEL,
+          'Please provide the following loan details.',
+          {nonPIIForm: {loan_type: loanType, fields: nonPIIFields}},
+        );
+        setMessages((prev) => [...prev, nonPIIFormMessage]);
+      } else {
+        await submitLoanApplication(instruments, {});
+      }
+    } catch (error) {
+      console.error('Failed to submit PII consent:', error);
+      const errorMessage = createChatMessage(
+        Sender.MODEL,
+        "Sorry, I couldn't process PII authorization. Please try again.",
+      );
+      setMessages((prev) => [...prev, errorMessage]);
+    }
+  };
+
+  const handleSubmitNonPII = async (nonPIIData: Record<string, string>) => {
+    const instruments = pendingPIIInstruments.current;
+
+    if (!instruments || instruments.length === 0) {
+      const errorMessage = createChatMessage(
+        Sender.MODEL,
+        'Sorry, PII authorization was not found. Please restart the process.',
+      );
+      setMessages((prev) => [...prev, errorMessage]);
+      return;
+    }
+
+    // Hide the non-PII form
+    setMessages((prev) => prev.filter((msg) => !msg.nonPIIForm));
+
+    const userActionMessage = createChatMessage(
+      Sender.USER,
+      'User submitted loan details.',
+      {isUserAction: true},
+    );
+    setMessages((prev) => [...prev, userActionMessage]);
+
+    await submitLoanApplication(instruments, nonPIIData);
+  };
+
+  const submitLoanApplication = async (
+    piiInstruments: PIIInstrument[],
+    nonPIIData: Record<string, string>,
+  ) => {
+    try {
+      const parts: RequestPart[] = [
+        {type: 'data', data: {'action': 'submit_loan_application'}},
+        {
+          type: 'data',
+          data: {
+            'a2a.ucp.checkout.pii_data': piiInstruments,
+            'a2a.ucp.checkout.loan_application': nonPIIData,
+          },
+        },
+      ];
+
+      await handleSendMessage(parts, {isUserAction: true});
+    } catch (error) {
+      console.error('Error submitting loan application:', error);
+      const errorMessage = createChatMessage(
+        Sender.MODEL,
+        'Sorry, there was an issue submitting your loan application.',
+      );
+      setMessages((prev) => [...prev, errorMessage]);
+      setIsLoading(false);
+    }
+  };
+
   const handleSendMessage = async (
     messageContent: string | RequestPart[],
     options?: {isUserAction?: boolean; headers?: Record<string, string>},
@@ -272,7 +513,7 @@ function App() {
     try {
       const requestParts =
         typeof messageContent === 'string'
-          ? [{type: 'text', text: messageContent}]
+          ? [{type: 'text' as const, text: messageContent}]
           : messageContent;
 
       const requestParams: {
@@ -353,46 +594,25 @@ function App() {
 
       for (const part of responseParts) {
         if (part.text) {
-          // Simple text
           combinedBotMessage.text +=
             (combinedBotMessage.text ? '\n' : '') + part.text;
-        } else if (part.data?.['a2a.product_results']) {
-          // Product results
-          combinedBotMessage.text +=
-            (combinedBotMessage.text ? '\n' : '') +
-            (part.data['a2a.product_results'].content || '');
-          combinedBotMessage.products =
-            part.data['a2a.product_results'].results;
-        } else if (part.data?.['a2a.service_results']) {
-          // Service results
-          combinedBotMessage.services = part.data['a2a.service_results'];
-        } else if (part.data?.['a2a.locations']) {
-          // Location results
-          combinedBotMessage.locations = part.data['a2a.locations'];
-        } else if (part.data?.['a2a.staff']) {
-          // Staff results
-          combinedBotMessage.staff = part.data['a2a.staff'];
-        } else if (part.data?.['a2a.availability_slots']) {
-          // Availability slots
-          combinedBotMessage.availabilitySlots = part.data['a2a.availability_slots'];
-        } else if (part.data?.['a2a.bookings']) {
-          // Bookings
-          combinedBotMessage.bookings = part.data['a2a.bookings'];
-        } else if (part.data?.['a2a.ucp.checkout']) {
-          // Checkout
-          combinedBotMessage.checkout = part.data['a2a.ucp.checkout'];
+        } else if (part.data) {
+          // Use the domain registry to parse data parts
+          const parsed = registry.parseDataPart(part.data);
+          // Merge parsed text (product_results may include text content)
+          if (parsed.text) {
+            combinedBotMessage.text +=
+              (combinedBotMessage.text ? '\n' : '') + parsed.text;
+            // biome-ignore lint/performance/noDelete: removing before spread
+            delete parsed.text;
+          }
+          Object.assign(combinedBotMessage, parsed);
         }
       }
 
       const newMessages: ChatMessage[] = [];
       const hasContent =
-        combinedBotMessage.text ||
-        combinedBotMessage.products ||
-        combinedBotMessage.services ||
-        combinedBotMessage.locations ||
-        combinedBotMessage.availabilitySlots ||
-        combinedBotMessage.bookings ||
-        combinedBotMessage.checkout;
+        combinedBotMessage.text || registry.hasContent(combinedBotMessage);
       if (hasContent) {
         newMessages.push(combinedBotMessage);
       }
@@ -424,7 +644,7 @@ function App() {
 
   return (
     <div className="flex flex-col h-screen max-h-screen bg-white font-sans">
-      <Header logoUrl={appConfig.logoUrl} title={appConfig.name} />
+      <Header />
       <main
         ref={chatContainerRef}
         className="flex-grow overflow-y-auto p-4 md:p-6 space-y-2">
@@ -437,18 +657,21 @@ function App() {
             onSelectLocation={handleSelectLocation}
             onSelectTimeSlot={handleSelectTimeSlot}
             onCheckout={
-              msg.checkout?.status !== 'ready_for_complete'
+              msg.checkout?.status !== 'ready_for_complete' && !msg.checkout?.lending?.loan_type
                 ? handleStartPayment
                 : undefined
             }
             onSelectPaymentMethod={handlePaymentMethodSelected}
             onConfirmPayment={handleConfirmPayment}
             onCompletePayment={
-              msg.checkout?.status === 'ready_for_complete'
+              msg.checkout?.status === 'ready_for_complete' && !msg.checkout?.lending?.loan_type
                 ? handlePaymentMethodSelection
                 : undefined
             }
-            isLastCheckout={index === lastCheckoutIndex}></ChatMessageComponent>
+            isLastCheckout={index === lastCheckoutIndex}
+            onSelectPIIMethod={handlePIIMethodSelected}
+            onPIICollected={handlePIICollected}
+            onSubmitNonPII={handleSubmitNonPII}></ChatMessageComponent>
         ))}
       </main>
       <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />

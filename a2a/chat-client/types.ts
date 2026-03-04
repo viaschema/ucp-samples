@@ -70,6 +70,14 @@ export interface ChatMessage {
   staff?: StaffResponse[];
   availabilitySlots?: AvailabilitySlot[];
   bookings?: Booking[];
+  lenders?: Lender[];
+  loanOffers?: LoanOffer[];
+  piiMethods?: PIIMethod[];
+  piiLenderNames?: string[];
+  piiRequiredFields?: string[];
+  piiLoanType?: string;
+  piiCollectionFields?: string[];
+  nonPIIForm?: { loan_type: string; fields: string[] };
 }
 
 
@@ -94,7 +102,7 @@ export interface CheckoutItem {
 export interface PaymentHandler {
   id: string;
   name: string;
-  //...other props
+  config?: Record<string, unknown>;
 }
 export interface Payment {
   handlers: PaymentHandler[];
@@ -109,10 +117,15 @@ export interface Checkout {
   continue_url?: string | null;
   status: string;
   totals: CheckoutTotal[];
+  order?: {
+    id: string;
+    permalink_url?: string;
+  };
   order_id?: string;
   order_permalink_url?: string;
   payment?: Payment;
   appointment?: Appointment;
+  lending?: LendingInfo;
 }
 
 // Location types
@@ -287,4 +300,67 @@ export interface AppointmentSlot {
 
 export interface Appointment {
   slots: AppointmentSlot[];
+}
+
+// PII types (mirrors Payment types for lending)
+export interface PIICredential {
+  type: string;
+  token: string;
+}
+
+export interface PIIMethod {
+  id: string;
+  fields_stored: string[];
+  loan_type: string;
+}
+
+export interface PIIInstrument extends PIIMethod {
+  handler_id: string;
+  handler_name: string;
+  credential: PIICredential;
+  platform_id?: string;
+}
+
+export interface PIIHandler {
+  id: string;
+  name: string;
+  supported_loan_types?: string[];
+  config?: Record<string, unknown>;
+}
+
+export interface PIIConsent {
+  pii_method_id: string;
+  handler_id: string;
+  fields_consented: string[];
+  loan_type: string;
+  platform_ids: string[];
+  consented_at: string;
+}
+
+// Lending types
+export interface Lender {
+  lender_name: string;
+  loan_types_offered: string[];
+  description: string;
+  platform_id: string;
+}
+
+export interface LoanOffer {
+  lender_name: string;
+  rate: number;
+  amount: number;
+  term_months: number;
+  monthly_payment: number;
+  continue_url: string;
+}
+
+export interface LendingInfo {
+  loan_type?: string;
+  handlers?: PIIHandler[];
+  lenders?: Lender[];
+  offers?: LoanOffer[];
+  status?: string;
+  required_pii_fields?: string[];
+  required_non_pii_fields?: string[];
+  missing_pii_fields?: string[];
 }

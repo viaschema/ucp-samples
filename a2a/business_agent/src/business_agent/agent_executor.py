@@ -37,11 +37,16 @@ from .constants import (
     ADK_EXTENSIONS_STATE_KEY,
     ADK_LATEST_TOOL_RESULT,
     ADK_PAYMENT_STATE,
+    ADK_PII_STATE,
     ADK_UCP_METADATA_STATE,
     UCP_AGENT_HEADER,
+    UCP_LOAN_APPLICATION_KEY,
     UCP_PAYMENT_DATA_KEY,
+    UCP_PII_COLLECTION_KEY,
+    UCP_PII_DATA_KEY,
     UCP_RISK_SIGNALS_KEY,
 )
+from .models.lending_types import PIIInstrument
 from .ucp_profile_resolver import ProfileResolver
 
 
@@ -178,14 +183,20 @@ class ADKAgentExecutor(AgentExecutor):
         self._activate_extensions(context)
         ucp_metadata = self.ucp_processor.prepare_ucp_metadata(context)
 
-        query, payment_data = self._prepare_input(context)
+        query, payment_data, pii_data = self._prepare_input(context)
 
         user_id: str = context.context_id  # random guest id for the session
 
         try:
             session = await self._get_or_create_session(context, user_id)
             result_parts = await self._run_agent_and_process_response(
-                user_id, session.id, query, context, ucp_metadata, payment_data
+                user_id,
+                session.id,
+                query,
+                context,
+                ucp_metadata,
+                payment_data,
+                pii_data,
             )
             await event_queue.enqueue_event(
                 new_agent_parts_message(result_parts, context.context_id, None)
@@ -213,22 +224,25 @@ class ADKAgentExecutor(AgentExecutor):
     def _prepare_input(
         self,
         context: RequestContext,
-    ) -> tuple[str, dict | None]:
-        """Prepare user query and payment mandate from the request context.
+    ) -> tuple[str, dict | None, dict | None]:
+        """Prepare user query, payment data, and PII data from the request.
 
         Args:
             context: The request context.
 
         Returns:
-            tuple[str, dict | None]: The query and payment data.
+            tuple[str, dict | None, dict | None]: The query, payment data,
+                and PII data.
 
         """
         query = context.get_user_input()
         data_list = get_data_parts(context.message.parts)  # type: ignore
         payment_payload: dict[str, Any] = {}
+        pii_payload: dict[str, Any] = {}
         payment_keys = [UCP_PAYMENT_DATA_KEY, UCP_RISK_SIGNALS_KEY]
+        pii_keys = [UCP_PII_DATA_KEY, UCP_PII_COLLECTION_KEY, UCP_LOAN_APPLICATION_KEY]
 
-        # extract payment data related structured inputs
+        # extract payment and PII data related structured inputs
         # for processing by tools from the state
         for data_part in data_list:
             for key in payment_keys:
@@ -239,16 +253,30 @@ class ADKAgentExecutor(AgentExecutor):
                     else:
                         payment_payload[key] = value
 
+            for key in pii_keys:
+                if key in data_part:
+                    value = data_part.pop(key)
+                    if key == UCP_PII_DATA_KEY:
+                        if isinstance(value, list):
+                            pii_payload[key] = [
+                                PIIInstrument.model_validate(v) for v in value
+                            ]
+                        else:
+                            pii_payload[key] = PIIInstrument.model_validate(value)
+                    else:
+                        pii_payload[key] = value
+
             if data_part:
                 query += "\n" + json.dumps(data_part)
 
-        return query, payment_payload or None
+        return query, payment_payload or None, pii_payload or None
 
     def _build_initial_state_delta(
         self,
         context: RequestContext,
         ucp_metadata: UcpMetadata,
         payment_data: dict | None,
+        pii_data: dict | None = None,
     ) -> dict:
         """Build the initial state delta for the agent run.
 
@@ -256,6 +284,7 @@ class ADKAgentExecutor(AgentExecutor):
             context: The request context.
             ucp_metadata: The UCP metadata.
             payment_data: The payment data.
+            pii_data: The PII data.
 
         Returns:
             dict: The initial state delta.
@@ -265,6 +294,7 @@ class ADKAgentExecutor(AgentExecutor):
             ADK_UCP_METADATA_STATE: ucp_metadata,
             ADK_EXTENSIONS_STATE_KEY: context.requested_extensions,
             ADK_PAYMENT_STATE: payment_data,
+            ADK_PII_STATE: pii_data,
             ADK_LATEST_TOOL_RESULT: None,
         }
 
@@ -276,6 +306,7 @@ class ADKAgentExecutor(AgentExecutor):
         context: RequestContext,
         ucp_metadata: UcpMetadata,
         payment_data: dict | None,
+        pii_data: dict | None = None,
     ) -> list[Part]:
         """Run the ADK agent and processes the response.
 
@@ -286,6 +317,7 @@ class ADKAgentExecutor(AgentExecutor):
             context: The request context.
             ucp_metadata: The UCP metadata.
             payment_data: The payment data.
+            pii_data: The PII data.
 
         Returns:
             list[Part]: The response parts.
@@ -294,7 +326,7 @@ class ADKAgentExecutor(AgentExecutor):
         content = types.Content(role="user", parts=[types.Part.from_text(text=query)])
 
         state_delta = self._build_initial_state_delta(
-            context, ucp_metadata, payment_data
+            context, ucp_metadata, payment_data, pii_data
         )
         result_parts: list[Part] = []
 

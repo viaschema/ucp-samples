@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viaschema.com/schemas/lending/types/pii_handler.json",
+  "title": "PII Handler",
+  "description": "A PII handler from the merchant's UCP profile. Represents a trusted third-party PII provider that can collect and store user PII on behalf of the merchant.",
+  "type": "object",
+  "required": ["id", "name"],
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Handler identifier."
+    },
+    "name": {
+      "type": "string",
+      "description": "Handler name (e.g. 'example.pii.provider')."
+    },
+    "version": {
+      "type": "string",
+      "description": "Handler version."
+    },
+    "spec": {
+      "type": "string",
+      "format": "uri",
+      "description": "Handler specification URL."
+    },
+    "config_schema": {
+      "type": "string",
+      "format": "uri",
+      "description": "Handler config schema URL."
+    },
+    "supported_loan_types": {
+      "type": "array",
+      "description": "Loan types this handler supports.",
+      "items": { "type": "string" }
+    },
+    "config": {
+      "type": "object",
+      "description": "Handler-specific configuration (e.g. platform_id).",
+      "additionalProperties": true
+    }
+  }
+}
