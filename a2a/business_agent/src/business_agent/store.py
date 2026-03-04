@@ -12,7 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Service Store for appointment booking using Square backend."""
+"""Service Store for appointment booking using Square backend.
+
+The store manages core checkout lifecycle (create, line items, totals,
+payment, order). Domain-specific logic (appointment slots, lending
+initialization) is delegated to the ``AppointmentManager`` and the
+``DomainRegistry.initialize_checkout`` hook respectively.
+"""
 
 from __future__ import annotations
 
@@ -31,29 +37,23 @@ from ucp_sdk.models.schemas.shopping.types.line_item_resp import (
 from ucp_sdk.models.schemas.shopping.types.order_confirmation import (
     OrderConfirmation,
 )
-from ucp_sdk.models.schemas.shopping.types.retail_location_resp import (
-    RetailLocationResponse,
-)
 from ucp_sdk.models.schemas.shopping.types.total_resp import (
     TotalResponse as Total,
 )
 from ucp_sdk.models.schemas.ucp import ResponseCheckout as UcpMetadata
 
+from .appointment_manager import AppointmentManager
 from .constants import SQUARE_ACCESS_TOKEN, SQUARE_SANDBOX
 from .helpers import get_checkout_type
 from .models.appointment_types import (
     AppointmentCheckoutResponse,
-    AppointmentOptionResponse,
     AppointmentRequest,
-    AppointmentResponse,
-    AppointmentSlotResponse,
     AvailabilitySlot,
     Booking,
     Location,
     ServiceVariation,
     StaffResponse,
 )
-from .models.lending_types import LendingResponse, PIIHandler
 from .square_client import SquareServiceClient
 
 
@@ -65,7 +65,8 @@ class ServiceStore:
     """Service Store for appointment booking using Square backend.
 
     Uses Square API for service catalog, availability, and bookings.
-    Maintains local checkout state with appointment slots.
+    Maintains local checkout state. Delegates appointment-slot logic
+    to ``AppointmentManager``.
     """
 
     def __init__(self, square_token: str | None = None, sandbox: bool | None = None):
@@ -90,6 +91,12 @@ class ServiceStore:
         self._orders: dict[str, AppointmentCheckoutResponse] = {}
         self._service_cache: dict[str, ServiceVariation] = {}
         self._initialize_ucp_metadata()
+
+        # Appointment slot management is delegated to AppointmentManager
+        self.appointments = AppointmentManager(
+            square_client=self.square,
+            service_resolver=self.get_service_variation,
+        )
 
     def _initialize_ucp_metadata(self):
         """Load UCP metadata from data/ucp.json."""
@@ -119,6 +126,10 @@ class ServiceStore:
     ) -> tuple[str, AppointmentCheckoutResponse]:
         """Create an empty checkout with all extension fields initialized.
 
+        Domain-specific fields (appointment, lending, etc.) are initialized
+        via the domain registry's ``initialize_checkout`` hook so that new
+        domains don't require changes to this method.
+
         Args:
             metadata: UCP metadata object.
 
@@ -136,17 +147,14 @@ class ServiceStore:
             status="incomplete",
             links=[],
             payment=PaymentResponse(handlers=self._ucp_metadata["payment"]["handlers"]),
-            appointment=AppointmentResponse(slots=[]),
-            lending=LendingResponse(
-                handlers=[
-                    PIIHandler(**h)
-                    for h in self._ucp_metadata.get("pii", {}).get("handlers", [])
-                ],
-            )
-            if hasattr(checkout_type, "model_fields")
-            and "lending" in checkout_type.model_fields
-            else None,
         )
+
+        # Let each registered domain initialize its fields
+        from .agent import domain_registry
+
+        active_caps = {c.name for c in metadata.capabilities}
+        domain_registry.initialize_checkout(checkout, self._ucp_metadata, active_caps)
+
         self._checkouts[checkout_id] = checkout
         return checkout_id, checkout
 
@@ -166,7 +174,6 @@ class ServiceStore:
 
         variations = self.square.list_service_variations(query)
 
-        # Cache for later lookup
         for v in variations:
             self._service_cache[v.id] = v
 
@@ -263,7 +270,6 @@ class ServiceStore:
         Returns:
             LineItem object.
         """
-        # Convert price to cents
         unit_price = int((service.price or 0) * 100)
 
         return LineItem(
@@ -304,10 +310,8 @@ class ServiceStore:
         Returns:
             AppointmentCheckoutResponse object.
         """
-        # Get service variation
         service = self.get_service_variation(service_variation_id)
 
-        # Get or create checkout
         if not checkout_id:
             checkout_id, checkout = self.create_empty_checkout(metadata)
         else:
@@ -315,7 +319,6 @@ class ServiceStore:
             if not checkout:
                 raise ValueError(f"Checkout with ID {checkout_id} not found")
 
-        # Check if service already in checkout
         found = False
         new_line_item_id = None
         for line_item in checkout.line_items:
@@ -330,9 +333,9 @@ class ServiceStore:
             checkout.line_items.append(line_item)
             new_line_item_id = line_item.id
 
-        # Create appointment slot if location and start_time provided
+        # Delegate appointment slot creation to AppointmentManager
         if location_id and start_time and new_line_item_id:
-            self._add_or_update_appointment_slot(
+            self.appointments.add_or_update_slot(
                 checkout=checkout,
                 line_item_id=new_line_item_id,
                 location_id=location_id,
@@ -345,75 +348,6 @@ class ServiceStore:
         self._recalculate_checkout(checkout)
         self._checkouts[checkout_id] = checkout
         return checkout
-
-    def _add_or_update_appointment_slot(
-        self,
-        checkout: AppointmentCheckoutResponse,
-        line_item_id: str,
-        location_id: str,
-        staff_id: str | None,
-        start_time: datetime,
-        notes: str | None,
-        service: ServiceVariation,
-    ):
-        """Add or update an appointment slot for a line item."""
-        # Ensure appointment response exists
-        if not checkout.appointment:
-            checkout.appointment = AppointmentResponse(slots=[])
-        if not checkout.appointment.slots:
-            checkout.appointment.slots = []
-
-        # Check if slot already exists for this line item
-        existing_slot = None
-        for slot in checkout.appointment.slots:
-            if line_item_id in slot.line_item_ids:
-                existing_slot = slot
-                break
-
-        # Get location info for the slot
-        location_resp = None
-        if self.square:
-            try:
-                loc = self.square.get_location(location_id)
-                location_resp = RetailLocationResponse(
-                    id=loc.id,
-                    name=loc.name,
-                )
-            except Exception:
-                location_resp = RetailLocationResponse(id=location_id, name="")
-        else:
-            location_resp = RetailLocationResponse(id=location_id, name="")
-
-        # Calculate end time based on service duration
-        duration_minutes = service.duration_seconds // 60
-        end_time = start_time
-
-        # Create option for this appointment
-        option = AppointmentOptionResponse(
-            id=uuid4().hex,
-            start_time=start_time,
-            end_time=end_time,
-            staff_id=staff_id,
-            duration_minutes=duration_minutes,
-        )
-
-        if existing_slot:
-            # Update existing slot
-            existing_slot.location = location_resp
-            existing_slot.options = [option]
-            existing_slot.selected_option_id = option.id
-            existing_slot.notes = notes
-        else:
-            # Create new slot
-            slot = AppointmentSlotResponse(
-                id=uuid4().hex,
-                line_item_ids=[line_item_id],
-                location=location_resp,
-                options=[option],
-                selected_option_id=option.id,
-                notes=notes,
-            )
-            checkout.appointment.slots.append(slot)
 
     def get_checkout(self, checkout_id: str) -> AppointmentCheckoutResponse | None:
         """Retrieve a checkout by ID.
@@ -442,18 +376,12 @@ class ServiceStore:
         if checkout is None:
             raise ValueError(f"Checkout with ID {checkout_id} not found")
 
-        # Remove line item
         checkout.line_items = [
             li for li in checkout.line_items if li.id != line_item_id
         ]
 
-        # Remove associated appointment slot
-        if checkout.appointment and checkout.appointment.slots:
-            checkout.appointment.slots = [
-                slot
-                for slot in checkout.appointment.slots
-                if line_item_id not in slot.line_item_ids
-            ]
+        # Delegate to AppointmentManager
+        self.appointments.remove_slots_for_line_item(checkout, line_item_id)
 
         self._recalculate_checkout(checkout)
         self._checkouts[checkout_id] = checkout
@@ -487,7 +415,6 @@ class ServiceStore:
         if checkout is None:
             raise ValueError(f"Checkout with ID {checkout_id} not found")
 
-        # Find and update line item
         line_item = None
         for li in checkout.line_items:
             if li.id == line_item_id:
@@ -499,10 +426,10 @@ class ServiceStore:
         if not line_item:
             raise ValueError(f"Line item {line_item_id} not found")
 
-        # Update appointment slot if appointment params provided
+        # Delegate appointment update to AppointmentManager
         if location_id and start_time:
             service = self.get_service_variation(line_item.item.id)
-            self._add_or_update_appointment_slot(
+            self.appointments.add_or_update_slot(
                 checkout=checkout,
                 line_item_id=line_item_id,
                 location_id=location_id,
@@ -532,76 +459,8 @@ class ServiceStore:
         if checkout is None:
             raise ValueError(f"Checkout with ID {checkout_id} not found")
 
-        # Ensure appointment response exists
-        if not checkout.appointment:
-            checkout.appointment = AppointmentResponse(slots=[])
-        if not checkout.appointment.slots:
-            checkout.appointment.slots = []
-
-        # Process each slot request
-        for slot_req in appointment.slots or []:
-            # Get location info
-            location_resp = None
-            if self.square:
-                try:
-                    loc = self.square.get_location(slot_req.location_id)
-                    location_resp = RetailLocationResponse(
-                        id=loc.id,
-                        name=loc.name,
-                    )
-                except Exception:
-                    location_resp = RetailLocationResponse(
-                        id=slot_req.location_id, name=""
-                    )
-            else:
-                location_resp = RetailLocationResponse(id=slot_req.location_id, name="")
-
-            # Get duration from first line item's service
-            duration_minutes = 60
-            if slot_req.line_item_ids:
-                for li in checkout.line_items:
-                    if li.id in slot_req.line_item_ids:
-                        try:
-                            service = self.get_service_variation(li.item.id)
-                            duration_minutes = service.duration_seconds // 60
-                        except Exception:
-                            pass
-                        break
-
-            # Create option
-            option = AppointmentOptionResponse(
-                id=uuid4().hex,
-                start_time=slot_req.start_time,
-                staff_id=slot_req.staff_id,
-                duration_minutes=duration_minutes,
-            )
-
-            # Check if updating existing slot or creating new
-            existing_slot = None
-            if slot_req.id:
-                for slot in checkout.appointment.slots:
-                    if slot.id == slot_req.id:
-                        existing_slot = slot
-                        break
-
-            if existing_slot:
-                # Update existing slot
-                existing_slot.line_item_ids = slot_req.line_item_ids
-                existing_slot.location = location_resp
-                existing_slot.options = [option]
-                existing_slot.selected_option_id = option.id
-                existing_slot.notes = slot_req.notes
-            else:
-                # Create new slot
-                slot = AppointmentSlotResponse(
-                    id=slot_req.id or uuid4().hex,
-                    line_item_ids=slot_req.line_item_ids,
-                    location=location_resp,
-                    options=[option],
-                    selected_option_id=option.id,
-                    notes=slot_req.notes,
-                )
-                checkout.appointment.slots.append(slot)
+        # Delegate to AppointmentManager
+        self.appointments.apply_appointment_request(checkout, appointment)
 
         self._recalculate_checkout(checkout)
         self._checkouts[checkout_id] = checkout
@@ -656,7 +515,6 @@ class ServiceStore:
             Total(type="discount", display_text="Discount", amount=0),
         ]
 
-        # Add tax (10% flat)
         tax = round(subtotal * 0.1)
         totals.append(Total(type="tax", display_text="Tax", amount=tax))
 
@@ -685,19 +543,8 @@ class ServiceStore:
         if checkout.buyer is None:
             messages.append("Provide a buyer email address")
 
-        # Check if all line items have appointment slots
-        if checkout.appointment and checkout.appointment.slots:
-            scheduled_items = set()
-            for slot in checkout.appointment.slots:
-                scheduled_items.update(slot.line_item_ids)
-
-            unscheduled = [
-                li for li in checkout.line_items if li.id not in scheduled_items
-            ]
-            if unscheduled:
-                messages.append("Some services don't have appointments scheduled")
-        elif checkout.line_items:
-            messages.append("No appointments scheduled for services")
+        # Delegate appointment validation to AppointmentManager
+        messages.extend(self.appointments.validate_appointments(checkout))
 
         if messages:
             return "\n".join(messages)
@@ -735,13 +582,11 @@ class ServiceStore:
         booking_ids = []
         if self.square and checkout.appointment and checkout.appointment.slots:
             for slot in checkout.appointment.slots:
-                # Get the service variation ID from line items
                 for li_id in slot.line_item_ids:
                     for li in checkout.line_items:
                         if li.id == li_id:
                             service_variation_id = li.item.id
 
-                            # Get selected option
                             selected_option = None
                             for opt in slot.options or []:
                                 if opt.id == slot.selected_option_id:
@@ -807,6 +652,5 @@ class ServiceStore:
         return self.square.cancel_booking(booking_id)
 
 
-# Create default store instance (will use environment variables)
 # Backwards compatibility alias
 RetailStore = ServiceStore

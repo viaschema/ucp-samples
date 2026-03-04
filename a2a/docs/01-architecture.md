@@ -17,8 +17,8 @@ The architecture follows a clean separation of concerns:
 
 - **Chat Client (React :3000)** — User interface, A2A messaging client, and CredentialProviderProxy for mock payments
 - **Cymbal Retail Agent (Python :10999)** — A2A Starlette server, ADKAgentExecutor bridge, and ProfileResolver for UCP negotiation
-- **ADK Layer** — Runner for execution, Agent with 8 shopping tools, and Session service for state
-- **Business Layer** — RetailStore for products/checkouts/orders and MockPaymentProcessor for payment simulation
+- **ADK Layer** — Runner for execution, Agent with domain-registered tools (shopping, appointments, lending), and Session service for state
+- **Business Layer** — ServiceStore for products/checkouts/orders, AppointmentManager for scheduling, and MockPaymentProcessor for payment simulation
 
 ## Components
 
@@ -29,8 +29,10 @@ The architecture follows a clean separation of concerns:
 | A2A Server | `main.py` | HTTP server, routing, static files |
 | Agent Executor | `agent_executor.py` | Bridge A2A ↔ ADK, session management |
 | Profile Resolver | `ucp_profile_resolver.py` | UCP capability negotiation |
-| ADK Agent | `agent.py` | LLM reasoning, tool execution |
-| Retail Store | `store.py` | Products, checkouts, orders |
+| ADK Agent | `agent.py` | DomainRegistry assembly, root agent creation |
+| Domain Modules | `domains/*.py` | Per-domain tools, instructions, checkout mixins |
+| Service Store | `store.py` | Products, checkouts, orders |
+| Appointment Manager | `appointment_manager.py` | Appointment slot CRUD, validation |
 | Payment Processor | `payment_processor.py` | Mock payment handling |
 
 ### Frontend
@@ -38,7 +40,11 @@ The architecture follows a clean separation of concerns:
 | Component | File | Responsibility |
 |-----------|------|----------------|
 | App | `App.tsx` | State management, A2A messaging |
-| ChatMessage | `components/ChatMessage.tsx` | Message rendering |
+| Domain Registry | `domains/registry.ts` | Response handler registry, content detection |
+| Shopping Domain | `domains/shopping.tsx` | Product/checkout response handlers + renderer |
+| Appointment Domain | `domains/appointments.tsx` | Location/availability response handlers + renderer |
+| Lending Domain | `domains/lending.tsx` | Lender/loan response handlers + renderer |
+| ChatMessage | `components/ChatMessage.tsx` | Composes domain renderers |
 | Checkout | `components/Checkout.tsx` | Checkout display |
 | ProductCard | `components/ProductCard.tsx` | Product cards |
 | PaymentMethodSelector | `components/PaymentMethodSelector.tsx` | Payment selection |
@@ -66,7 +72,7 @@ The architecture follows a clean separation of concerns:
 | **A2A Server** | HTTP request | HTTP response | `A2AStarletteApplication` |
 | **Agent Executor** | A2A context | Event queue | `ADKAgentExecutor` |
 | **ADK Agent** | User query + state | Tool results | `Agent` (google.adk) |
-| **Retail Store** | Method calls | Domain objects | `RetailStore` |
+| **Service Store** | Method calls | Domain objects | `ServiceStore` |
 
 ## Mock Store Architecture
 
@@ -143,11 +149,11 @@ class ShopifyStore(IRetailStore):
         return ProductResults(results=[...])
 ```
 
-**3. Swap in agent.py** (line 43):
+**3. Swap in dependencies.py**:
 
 ```python
 # Before
-store = RetailStore()
+store = ServiceStore()
 
 # After
 store = ShopifyStore(

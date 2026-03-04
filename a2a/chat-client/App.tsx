@@ -21,6 +21,8 @@ import {appConfig} from './config';
 import {CredentialProviderProxy} from './mocks/credentialProviderProxy';
 import {PIIProviderProxy} from './mocks/piiProviderProxy';
 
+import {registry} from './domains';
+
 import {
   type AvailabilitySlot,
   type ChatMessage,
@@ -592,56 +594,25 @@ function App() {
 
       for (const part of responseParts) {
         if (part.text) {
-          // Simple text
           combinedBotMessage.text +=
             (combinedBotMessage.text ? '\n' : '') + part.text;
-        } else if (part.data?.['a2a.product_results']) {
-          // Product results
-          combinedBotMessage.text +=
-            (combinedBotMessage.text ? '\n' : '') +
-            (part.data['a2a.product_results'].content || '');
-          combinedBotMessage.products =
-            part.data['a2a.product_results'].results;
-        } else if (part.data?.['a2a.service_results']) {
-          // Service results
-          combinedBotMessage.services = part.data['a2a.service_results'];
-        } else if (part.data?.['a2a.locations']) {
-          // Location results
-          combinedBotMessage.locations = part.data['a2a.locations'];
-        } else if (part.data?.['a2a.staff']) {
-          // Staff results
-          combinedBotMessage.staff = part.data['a2a.staff'];
-        } else if (part.data?.['a2a.availability_slots']) {
-          // Availability slots
-          combinedBotMessage.availabilitySlots = part.data['a2a.availability_slots'];
-        } else if (part.data?.['a2a.bookings']) {
-          // Bookings
-          combinedBotMessage.bookings = part.data['a2a.bookings'];
         } else if (part.data) {
-          // Data parts may contain multiple keys — check each independently
-          if (part.data['a2a.ucp.checkout']) {
-            combinedBotMessage.checkout = part.data['a2a.ucp.checkout'];
+          // Use the domain registry to parse data parts
+          const parsed = registry.parseDataPart(part.data);
+          // Merge parsed text (product_results may include text content)
+          if (parsed.text) {
+            combinedBotMessage.text +=
+              (combinedBotMessage.text ? '\n' : '') + parsed.text;
+            // biome-ignore lint/performance/noDelete: removing before spread
+            delete parsed.text;
           }
-          if (part.data['a2a.ucp.lending.lenders']) {
-            combinedBotMessage.lenders = part.data['a2a.ucp.lending.lenders'];
-          }
-          if (part.data['a2a.ucp.lending.loan_offers']) {
-            combinedBotMessage.loanOffers = part.data['a2a.ucp.lending.loan_offers'];
-          }
+          Object.assign(combinedBotMessage, parsed);
         }
       }
 
       const newMessages: ChatMessage[] = [];
       const hasContent =
-        combinedBotMessage.text ||
-        combinedBotMessage.products ||
-        combinedBotMessage.services ||
-        combinedBotMessage.locations ||
-        combinedBotMessage.availabilitySlots ||
-        combinedBotMessage.bookings ||
-        combinedBotMessage.checkout ||
-        combinedBotMessage.lenders ||
-        combinedBotMessage.loanOffers;
+        combinedBotMessage.text || registry.hasContent(combinedBotMessage);
       if (hasContent) {
         newMessages.push(combinedBotMessage);
       }

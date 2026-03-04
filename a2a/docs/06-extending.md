@@ -102,59 +102,31 @@ def _get_fulfillment_options(self, address: PostalAddress) -> list:
 
 ---
 
-## Part 2: Adding Tools (ADK Perspective)
+## Part 2: Adding Tools (Domain Module Approach)
 
 ### Tool Architecture
 
-Every ADK tool follows this pattern:
+Tools are organized into **domain modules** — each domain encapsulates its tools, instructions, checkout extensions, and response data keys. See [Domain Module Pattern](./10-domain-module-pattern.md) for the full architecture.
 
 <div align="center">
   <img src="../assets/diagrams/06_02_tool_architecture.webp" alt="Tool Execution Pattern" width="800">
   <p><em>Figure 2: Tool execution pattern — User query flows through Agent → LLM (tool selection) → Tool (with ToolContext) → Store. Each tool follows: get state → validate → execute → return UCP response.</em></p>
 </div>
 
-### Template: Creating a New Tool
+### Option A: Add a Tool to an Existing Domain
+
+If your tool belongs to an existing domain (shopping, appointments, lending), add it to that domain's module:
 
 ```python
-# agent.py
+# domains/shopping.py — add the tool function
 
-def my_new_tool(tool_context: ToolContext, param: str) -> dict:
-    """Docstring becomes the LLM's understanding of this tool.
-
-    Args:
-        param: Description helps LLM know what to pass
-
-    Returns:
-        Description of what the tool returns
-    """
-    # 1. Get state
-    checkout_id = tool_context.state.get(ADK_USER_CHECKOUT_ID)
-    metadata = tool_context.state.get(ADK_UCP_METADATA_STATE)
-
-    # 2. Validate
-    if not checkout_id:
-        return _create_error_response("No active checkout")
-
-    # 3. Execute business logic
-    try:
-        result = store.my_method(checkout_id, param)
-    except ValueError as e:
-        return _create_error_response(str(e))
-
-    # 4. Return UCP-formatted response
-    return {UCP_CHECKOUT_KEY: result.model_dump(mode="json")}
-```
-
-### Example: Apply Discount Tool
-
-```python
 def apply_discount(tool_context: ToolContext, promo_code: str) -> dict:
     """Apply a promotional code to the current checkout.
 
     Args:
         promo_code: The promotional code to apply (e.g., "SAVE10")
     """
-    checkout_id = tool_context.state.get(ADK_USER_CHECKOUT_ID)
+    checkout_id = tool_context.state.get(CoreKeys.CHECKOUT_ID)
     if not checkout_id:
         return _create_error_response("No active checkout")
 
@@ -164,59 +136,54 @@ def apply_discount(tool_context: ToolContext, promo_code: str) -> dict:
     except ValueError as e:
         return _create_error_response(str(e))
 
-# Add to agent tools list
-root_agent = Agent(..., tools=[...existing..., apply_discount])
+# Then add to ShoppingDomain.tools property:
+class ShoppingDomain(DomainModule):
+    @property
+    def tools(self) -> list:
+        return [...existing..., apply_discount]
 ```
 
-### Example: Order Tracking Tool
+### Option B: Create a New Domain Module
+
+For a new capability area, create a domain module:
 
 ```python
-def get_order_status(tool_context: ToolContext, order_id: str) -> dict:
-    """Get the status of a placed order.
+# domains/order_tracking.py
+from .base import DomainModule
 
-    Args:
-        order_id: The order ID from order confirmation
-    """
+def get_order_status(tool_context: ToolContext, order_id: str) -> dict:
+    """Get the status of a placed order."""
     order = store.get_order(order_id)
     if not order:
         return _create_error_response("Order not found")
+    return {"a2a.order_status": order.model_dump(mode="json")}
 
-    return {
-        "order": {
-            "id": order.order.id,
-            "status": "shipped",  # or "processing", "delivered"
-            "tracking_number": "1Z999AA10123456784",
-            "estimated_delivery": "2026-01-25",
-            "permalink_url": order.order.permalink_url,
-        }
-    }
+class OrderTrackingDomain(DomainModule):
+    @property
+    def capability_uri(self) -> str:
+        return "dev.ucp.shopping.order_tracking"
+
+    @property
+    def tools(self) -> list:
+        return [get_order_status]
+
+    @property
+    def agent_instructions(self) -> str:
+        return "Order tracking: Use get_order_status to check order status."
+
+    @property
+    def response_data_keys(self) -> list[str]:
+        return ["a2a.order_status"]
 ```
 
-### Example: Product Recommendations Tool
+Then register in `agent.py:_build_registry()`:
 
 ```python
-def get_recommendations(
-    tool_context: ToolContext,
-    rec_type: str = "popular"
-) -> dict:
-    """Get product recommendations for the customer.
-
-    Args:
-        rec_type: Type of recommendations - "popular", "similar", "cart_based"
-    """
-    checkout_id = tool_context.state.get(ADK_USER_CHECKOUT_ID)
-
-    if rec_type == "cart_based" and checkout_id:
-        checkout = store.get_checkout(checkout_id)
-        product_ids = [item.item.id for item in checkout.line_items]
-        products = store.get_related_products(product_ids)
-    elif rec_type == "popular":
-        products = store.get_popular_products(limit=4)
-    else:
-        products = store.search_products("").results[:4]
-
-    return {"a2a.product_results": {"results": products}}
+from .domains.order_tracking import OrderTrackingDomain
+registry.register(OrderTrackingDomain())
 ```
+
+The tool is automatically included in the agent's tool list, the instructions are composed, and the response data keys are captured by callbacks — no other files need modification.
 
 ---
 
@@ -233,6 +200,8 @@ UCP capabilities let you extend checkout data in a standardized way. The client 
 
 ### Adding a New Capability
 
+With the domain module pattern, adding a new UCP capability is streamlined. See [Domain Module Pattern](./10-domain-module-pattern.md) for the full step-by-step guide.
+
 **Step 1**: Update merchant profile (`data/ucp.json`)
 
 ```json
@@ -248,12 +217,12 @@ UCP capabilities let you extend checkout data in a standardized way. The client 
 }
 ```
 
-**Step 2**: Create checkout type extension
+**Step 2**: Create checkout type extension and domain module
 
 ```python
-# helpers/type_generator.py or models.py
-
+# models/loyalty_types.py
 from pydantic import BaseModel
+from ..models.checkout_types import Checkout
 
 class Reward(BaseModel):
     id: str
@@ -263,32 +232,52 @@ class Reward(BaseModel):
 class LoyaltyCheckout(Checkout):
     loyalty_points: int | None = None
     rewards: list[Reward] | None = None
+
+# domains/loyalty.py
+from .base import DomainModule
+
+class LoyaltyDomain(DomainModule):
+    @property
+    def capability_uri(self) -> str:
+        return "dev.ucp.shopping.loyalty"
+
+    @property
+    def checkout_mixin(self) -> type:
+        return LoyaltyCheckout  # Automatically picked up by type_generator
+
+    @property
+    def tools(self) -> list:
+        return [apply_loyalty_points]
+
+    @property
+    def agent_instructions(self) -> str:
+        return "Loyalty: Use apply_loyalty_points to redeem customer points."
+
+    @property
+    def response_data_keys(self) -> list[str]:
+        return ["a2a.ucp.loyalty.rewards"]
+
+    def initialize_checkout_fields(self, checkout, ucp_metadata):
+        if hasattr(checkout, "loyalty_points"):
+            checkout.loyalty_points = 0
 ```
 
-**Step 3**: Update type generator (`helpers/type_generator.py`)
+**Step 3**: Register the domain
 
 ```python
-def get_checkout_type(ucp_metadata: UcpMetadata) -> type[Checkout]:
-    active = {cap.name for cap in ucp_metadata.capabilities}
-    bases = []
-
-    if "dev.ucp.shopping.fulfillment" in active:
-        bases.append(FulfillmentCheckout)
-    if "dev.ucp.shopping.loyalty" in active:  # NEW
-        bases.append(LoyaltyCheckout)
-    # ... other capabilities
-
-    if not bases:
-        return Checkout
-    return create_model("DynamicCheckout", __base__=tuple(bases))
+# agent.py — _build_registry()
+from .domains.loyalty import LoyaltyDomain
+registry.register(LoyaltyDomain())
 ```
 
-**Step 4**: Handle in tools (if needed)
+The checkout mixin is automatically picked up by `type_generator.py` via `registry.get_checkout_mixins()` — no manual edits to `type_generator.py` needed.
+
+**Step 4**: Handle in tools
 
 ```python
 def apply_loyalty_points(tool_context: ToolContext, points: int) -> dict:
     """Apply loyalty points to reduce checkout total."""
-    checkout_id = tool_context.state.get(ADK_USER_CHECKOUT_ID)
+    checkout_id = tool_context.state.get(CoreKeys.CHECKOUT_ID)
     checkout = store.apply_loyalty_points(checkout_id, points)
     return {UCP_CHECKOUT_KEY: checkout.model_dump(mode="json")}
 ```

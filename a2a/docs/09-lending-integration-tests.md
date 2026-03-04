@@ -46,7 +46,7 @@ Run all tests (lending + existing appointment) to verify no regressions:
 python -m pytest tests/ -v
 ```
 
-Expected: 59 tests pass (25 appointment + 34 lending).
+Expected: 90 tests pass (25 appointment + 34 lending + 31 shopping/integration).
 
 ## 2. PII Collection Flow Test
 
@@ -125,7 +125,7 @@ for offer in offers:
 ```bash
 cd a2a/business_agent
 source .env && export GOOGLE_API_KEY
-python -m business_agent.main
+uv run business_agent
 # Starts on :10999
 ```
 
@@ -140,7 +140,7 @@ npm run dev
 
 ```bash
 # Agent card - should include com.viaschema.lending capability and "lending" skill
-curl -s http://localhost:10999/.well-known/agent.json | python -m json.tool | grep -A4 "lending"
+curl -s http://localhost:10999/.well-known/agent-card.json | python -m json.tool | grep -A4 "lending"
 
 # Client profile - should include com.viaschema.lending
 curl -s http://localhost:3000/profile/agent_profile.json | python -m json.tool | grep "lending"
@@ -336,5 +336,5 @@ def test_type_generator_excludes_lending(self):
 | `Connection refused` on A2A call | Frontend not running (profile fetch fails) | Start frontend on :3000 first |
 | Checkout has no `lending` field | `com.viaschema.lending` not in client profile | Add to `agent_profile.json` capabilities |
 | All PII fields show as missing | Backend MockPIIProvider starts empty | This is correct - frontend proxy has mock data |
-| LLM doesn't call lending tools | Agent instruction may not match user query | Check agent.py instruction text includes lending workflow |
+| LLM doesn't call lending tools | Agent instruction may not match user query | Check `domains/lending.py` `LendingDomain.agent_instructions` property |
 | Offers not sorted | `apply_for_all_lenders` bug | Check `all_offers.sort(key=lambda o: o.rate)` in pii_provider.py |
