@@ -31,3 +31,30 @@ Example agent implementing A2A Extension for UCP
 3. Run `uv run business_agent`
 4. This starts the Cymbal Retail Agent on port 10999. You can verify by accessing
 the agent card at http://localhost:10999/.well-known/agent-card.json
+
+## VGS PII Integration (Optional)
+
+For real PII tokenization via VGS instead of the mock provider:
+
+1. Create a VGS vault at https://dashboard.verygoodsecurity.com
+2. Generate runtime access credentials: `vgs generate access-credentials --vault $VAULT_ID`
+3. Add to `.env`:
+   ```
+   VGS_VAULT_ID=<your vault id>
+   VGS_USERNAME=<runtime key>
+   VGS_PASSWORD=<runtime secret>
+   VGS_ENVIRONMENT=sandbox
+   LENDER_API_BASE=https://<your-ngrok-id>.ngrok-free.app/lender-api
+   ```
+4. Start ngrok: `ngrok http 10999`
+5. Apply VGS routes:
+   ```bash
+   vgs login
+   vgs apply routes --vault $VGS_VAULT_ID -f routes/inbound_pii_store.yaml
+   vgs apply routes --vault $VGS_VAULT_ID -f routes/outbound_lender.yaml
+   ```
+6. Run: `uv run business_agent`
+
+To use the mock provider instead (no VGS needed): set `PII_PROVIDER=mock` in `.env`.
+
+See [docs/11-vgs-pii-integration.md](../docs/11-vgs-pii-integration.md) for the full architecture.

@@ -34,6 +34,9 @@ The architecture follows a clean separation of concerns:
 | Service Store | `store.py` | Products, checkouts, orders |
 | Appointment Manager | `appointment_manager.py` | Appointment slot CRUD, validation |
 | Payment Processor | `payment_processor.py` | Mock payment handling |
+| PII Provider | `pii_provider.py`, `vgs_pii_provider.py` | PII storage, tokenization, consent, lender delivery |
+| Lender API | `lender_api.py` | Mock lender endpoints for loan offer generation |
+| Lending Tools | `lending_tools.py` | Agent tools for lending flow (injected via `init_lending()`) |
 
 ### Frontend
 
@@ -48,6 +51,8 @@ The architecture follows a clean separation of concerns:
 | Checkout | `components/Checkout.tsx` | Checkout display |
 | ProductCard | `components/ProductCard.tsx` | Product cards |
 | PaymentMethodSelector | `components/PaymentMethodSelector.tsx` | Payment selection |
+| VGSPIICollectionForm | `components/VGSPIICollectionForm.tsx` | VGS Collect JS secure PII form |
+| PIIProviderProxy | `mocks/piiProviderProxy.ts` | PII storage, consent, lender/config discovery |
 
 ## Request Flow
 

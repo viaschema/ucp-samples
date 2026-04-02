@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viaschema.com/schemas/pii/types/pii_instrument.json",
+  "title": "PIIInstrument",
+  "description": "A PII instrument containing a token from a trusted PII provider. Mirrors PaymentInstrument — the agent never sees raw PII, only this token-based reference.",
+  "type": "object",
+  "required": ["id", "handler_id", "handler_name", "credential"],
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "PII profile identifier."
+    },
+    "handler_id": {
+      "type": "string",
+      "description": "PII handler identifier (e.g., 'vgs_pii_provider')."
+    },
+    "handler_name": {
+      "type": "string",
+      "description": "PII handler dotted name (e.g., 'vgs.pii.provider')."
+    },
+    "credential": {
+      "$ref": "pii_credential.json",
+      "description": "Token credential from the PII provider."
+    },
+    "fields_stored": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "PII field names available via this token."
+    },
+    "loan_type": {
+      "type": "string",
+      "default": "all",
+      "description": "Loan type this PII profile covers."
+    },
+    "platform_id": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Platform this token was minted for. Each lender gets a separate token."
+    }
+  }
+}

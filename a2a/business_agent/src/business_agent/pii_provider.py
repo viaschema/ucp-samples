@@ -12,22 +12,58 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Mock PII Provider simulating a trusted third-party PII vault.
+"""PII Provider: protocol, base class, mock implementation, and HTTP routes.
 
-Analogous to MockPaymentProcessor but for PII storage and retrieval.
-The agent never sees raw PII - only opaque tokens that reference
-stored PII in this provider.
+The agent never sees raw PII — only opaque tokens that reference
+stored PII in the provider. BasePIIProvider implements the shared
+token/consent machinery; subclasses implement storage-specific logic.
 """
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
-from typing import Any, NamedTuple
+from abc import ABC, abstractmethod
+from typing import Any, NamedTuple, Protocol
 
 from a2a.types import Task, TaskState, TaskStatus
 
-from .models.lending_types import PIIConsent, PIIInstrument
+logger = logging.getLogger(__name__)
+
+from .models.lending_types import PIIConsent, PIICredential, PIIInstrument
+
+
+class PIIProvider(Protocol):
+    """Protocol for PII storage and token management.
+
+    Both MockPIIProvider and VGSPIIProvider implement this interface.
+    """
+
+    def get_stored_fields(self, user_email: str) -> list[str]: ...
+    def get_missing_fields(
+        self, user_email: str, required_fields: list[str]
+    ) -> list[str]: ...
+    def store_pii(self, user_email: str, pii_data: dict[str, Any]) -> dict: ...
+    def process_pii(self, pii_instrument: PIIInstrument) -> Task: ...
+    def issue_token(
+        self,
+        user_email: str,
+        platform_id: str = "_default",
+        fields: list[str] | None = None,
+    ) -> str: ...
+    def resolve_token(self, token: str, platform_id: str) -> dict[str, Any] | None: ...
+    def forward_pii(
+        self,
+        token: str,
+        platform_id: str,
+        url: str,
+        extra_data: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None: ...
+    def issue_consent(
+        self, user_email: str, consent: PIIConsent
+    ) -> tuple[str, list[PIIInstrument]]: ...
+
 
 TOKEN_TTL_SECONDS = 3600  # 1 hour
 
@@ -41,17 +77,140 @@ class TokenEntry(NamedTuple):
     allowed_fields: frozenset[str]
 
 
-class MockPIIProvider:
-    """Mock PII Provider simulating Merchant Agent to PII Provider Agent calls.
+# ---------------------------------------------------------------------------
+# Base class with shared token/consent logic
+# ---------------------------------------------------------------------------
 
-    Analogous to MockPaymentProcessor but for PII storage and retrieval.
-    Manages per-user PII storage, token issuance, and mock loan offer generation.
+
+class BasePIIProvider(ABC):
+    """Base class implementing token issuance, validation, and consent.
+
+    Subclasses implement storage-specific methods (get_stored_fields,
+    store_pii, resolve_token, forward_pii). The token and consent
+    machinery is identical across all providers.
     """
 
-    def __init__(self) -> None:
-        # Per-user PII storage: email -> {field_name: value}
-        # Pre-seeded with a demo user so the default flow demonstrates Path A
-        # (consent) without requiring collection first.
+    def __init__(self, handler_names: dict[str, str] | None = None) -> None:
+        self._handler_names = handler_names or {}
+        self._tokens: dict[str, TokenEntry] = {}
+        self._consents: dict[str, PIIConsent] = {}
+
+    # -- Abstract: subclasses implement these --
+
+    @abstractmethod
+    def get_stored_fields(self, user_email: str) -> list[str]: ...
+
+    @abstractmethod
+    def get_missing_fields(
+        self, user_email: str, required_fields: list[str]
+    ) -> list[str]: ...
+
+    @abstractmethod
+    def store_pii(self, user_email: str, pii_data: dict[str, Any]) -> dict: ...
+
+    @abstractmethod
+    def resolve_token(
+        self, token: str, platform_id: str
+    ) -> dict[str, Any] | None: ...
+
+    @abstractmethod
+    def forward_pii(
+        self,
+        token: str,
+        platform_id: str,
+        url: str,
+        extra_data: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None: ...
+
+    # -- Shared implementations --
+
+    def _validate_token(self, token: str, platform_id: str | None = None) -> TokenEntry | None:
+        """Validate a token and return its entry, or None if invalid."""
+        entry = self._tokens.get(token)
+        if entry is None:
+            return None
+        if time.time() - entry.created_at > TOKEN_TTL_SECONDS:
+            return None
+        if platform_id and entry.platform_id != platform_id:
+            return None
+        return entry
+
+    def process_pii(self, pii_instrument: PIIInstrument) -> Task:
+        """Validate a PII token."""
+        entry = self._validate_token(
+            pii_instrument.credential.token, pii_instrument.platform_id
+        )
+        state = TaskState.completed if entry else TaskState.failed
+        return Task(
+            context_id="pii_validation",
+            id=str(uuid.uuid4()),
+            status=TaskStatus(state=state),
+        )
+
+    def issue_token(
+        self,
+        user_email: str,
+        platform_id: str = "_default",
+        fields: list[str] | None = None,
+    ) -> str:
+        """Issue a field-scoped, platform-scoped PII token for a user."""
+        token = f"pii_token_{uuid.uuid4()}"
+        allowed = (
+            frozenset(fields)
+            if fields
+            else frozenset(self.get_stored_fields(user_email))
+        )
+        self._tokens[token] = TokenEntry(user_email, platform_id, time.time(), allowed)
+        return token
+
+    def issue_consent(
+        self, user_email: str, consent: PIIConsent
+    ) -> tuple[str, list[PIIInstrument]]:
+        """Process a formal PIIConsent: validate, record, and mint tokens."""
+        if not consent.platform_ids:
+            raise ValueError("platform_ids must not be empty")
+        if not consent.fields_consented:
+            raise ValueError("fields_consented must not be empty")
+
+        consent_id = f"consent_{uuid.uuid4()}"
+        self._consents[consent_id] = consent
+
+        instruments: list[PIIInstrument] = []
+        for platform_id in consent.platform_ids:
+            token = self.issue_token(
+                user_email, platform_id, fields=consent.fields_consented
+            )
+            token_entry = self._tokens[token]
+            instruments.append(
+                PIIInstrument(
+                    id=consent.pii_method_id,
+                    handler_id=consent.handler_id,
+                    handler_name=self._handler_names.get(
+                        consent.handler_id, consent.handler_id
+                    ),
+                    fields_stored=sorted(token_entry.allowed_fields),
+                    loan_type=consent.loan_type,
+                    platform_id=platform_id,
+                    credential=PIICredential(type="token", token=token),
+                )
+            )
+
+        return consent_id, instruments
+
+
+# ---------------------------------------------------------------------------
+# Mock implementation (in-memory storage)
+# ---------------------------------------------------------------------------
+
+
+class MockPIIProvider(BasePIIProvider):
+    """Mock PII Provider with in-memory storage.
+
+    Pre-seeded with a demo user so the consent-only flow works out of the box.
+    """
+
+    def __init__(self, handler_names: dict[str, str] | None = None) -> None:
+        super().__init__(handler_names)
         self._stored_pii: dict[str, dict[str, Any]] = {
             "foo@example.com": {
                 "first_name": "John",
@@ -80,45 +239,17 @@ class MockPIIProvider:
                 "employer_phone_number": "+15555678901",
             },
         }
-        # Token -> TokenEntry mapping for validation and field-level access control
-        self._tokens: dict[str, TokenEntry] = {}
-        # Consent records: consent_id -> PIIConsent
-        self._consents: dict[str, PIIConsent] = {}
 
     def get_stored_fields(self, user_email: str) -> list[str]:
-        """Return which PII fields are already stored for a user."""
-        user_pii = self._stored_pii.get(user_email, {})
-        return list(user_pii.keys())
+        return list(self._stored_pii.get(user_email, {}).keys())
 
     def get_missing_fields(
         self, user_email: str, required_fields: list[str]
     ) -> list[str]:
-        """Return required PII fields not yet stored for the user.
-
-        Args:
-            user_email: User's email address.
-            required_fields: List of required field names.
-
-        Returns:
-            Sorted list of missing field names.
-        """
         stored = set(self.get_stored_fields(user_email))
         return sorted(set(required_fields) - stored)
 
     def store_pii(self, user_email: str, pii_data: dict[str, Any]) -> dict:
-        """Store PII fields for a user. Can be called incrementally.
-
-        Validates the incoming data against the BorrowerPII model so that
-        field names and types are checked, while still supporting partial
-        (incremental) updates — unset fields default to None and are excluded.
-
-        Args:
-            user_email: User's email address.
-            pii_data: Dictionary of PII field name -> value.
-
-        Returns:
-            Dict with status and list of all stored field names.
-        """
         from .models.lending_fields import BorrowerPII
 
         validated = BorrowerPII.model_validate(pii_data)
@@ -132,168 +263,63 @@ class MockPIIProvider:
             "fields_stored": list(self._stored_pii[user_email].keys()),
         }
 
-    def process_pii(self, pii_instrument: PIIInstrument) -> Task:
-        """Validate a PII token. Mirrors MockPaymentProcessor.process_payment().
-
-        Also verifies platform_id if present on the instrument.
-
-        Args:
-            pii_instrument: The PII instrument containing the token.
-
-        Returns:
-            Task with completed status if token is valid.
-        """
-        token = pii_instrument.credential.token
-        entry = self._tokens.get(token)
-        if entry is None:
-            return Task(
-                context_id="pii_validation",
-                id=str(uuid.uuid4()),
-                status=TaskStatus(state=TaskState.failed),
-            )
-
-        if time.time() - entry.created_at > TOKEN_TTL_SECONDS:
-            return Task(
-                context_id="pii_validation",
-                id=str(uuid.uuid4()),
-                status=TaskStatus(state=TaskState.failed),
-            )
-        if (
-            pii_instrument.platform_id
-            and entry.platform_id != pii_instrument.platform_id
-        ):
-            return Task(
-                context_id="pii_validation",
-                id=str(uuid.uuid4()),
-                status=TaskStatus(state=TaskState.failed),
-            )
-
-        return Task(
-            context_id="pii_validation",
-            id=str(uuid.uuid4()),
-            status=TaskStatus(state=TaskState.completed),
-        )
-
-    def issue_token(
-        self,
-        user_email: str,
-        platform_id: str = "_default",
-        fields: list[str] | None = None,
-    ) -> str:
-        """Issue a field-scoped, platform-scoped PII token for a user.
-
-        Args:
-            user_email: User's email address.
-            platform_id: The platform this token is scoped to.
-            fields: Subset of PII fields this token grants access to.
-                    If None, grants access to all currently stored fields.
-
-        Returns:
-            An opaque token string.
-        """
-        token = f"pii_token_{uuid.uuid4()}"
-        allowed = (
-            frozenset(fields)
-            if fields
-            else frozenset(self.get_stored_fields(user_email))
-        )
-        self._tokens[token] = TokenEntry(user_email, platform_id, time.time(), allowed)
-        return token
-
     def resolve_token(self, token: str, platform_id: str) -> dict[str, Any] | None:
-        """Resolve a PII token to the stored PII data it grants access to.
-
-        Verifies platform scope, TTL, and filters returned data to only
-        the fields declared when the token was issued.
-
-        Args:
-            token: The opaque PII token.
-            platform_id: The platform attempting to resolve this token.
-
-        Returns:
-            Dict of PII field name -> value (only the allowed subset),
-            or None if token is invalid, expired, or platform mismatch.
-        """
-        entry = self._tokens.get(token)
+        entry = self._validate_token(token, platform_id)
         if entry is None:
-            return None
-        if entry.platform_id != platform_id:
-            return None
-        if time.time() - entry.created_at > TOKEN_TTL_SECONDS:
             return None
         all_pii = self._stored_pii.get(entry.email)
         if all_pii is None:
             return None
         return {k: v for k, v in all_pii.items() if k in entry.allowed_fields}
 
+    def forward_pii(
+        self,
+        token: str,
+        platform_id: str,
+        url: str,
+        extra_data: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        import httpx
 
-    def issue_consent(
-        self, user_email: str, consent: PIIConsent
-    ) -> tuple[str, list[PIIInstrument]]:
-        """Process a formal PIIConsent: validate, record, and mint tokens.
+        pii_data = self.resolve_token(token, platform_id)
+        if pii_data is None:
+            return None
 
-        Args:
-            user_email: User's email address.
-            consent: The formal consent object from the frontend.
+        payload: dict[str, Any] = {**pii_data}
+        if extra_data:
+            payload.update(extra_data)
 
-        Returns:
-            Tuple of (consent_id, list of PIIInstruments with platform-scoped tokens).
-
-        Raises:
-            ValueError: If consent is invalid (empty platforms, no fields, etc.).
-        """
-        if not consent.platform_ids:
-            raise ValueError("platform_ids must not be empty")
-        if not consent.fields_consented:
-            raise ValueError("fields_consented must not be empty")
-
-        consent_id = f"consent_{uuid.uuid4()}"
-        self._consents[consent_id] = consent
-
-        instruments: list[PIIInstrument] = []
-        from .models.lending_types import PIICredential
-
-        for platform_id in consent.platform_ids:
-            token = self.issue_token(
-                user_email, platform_id, fields=consent.fields_consented
-            )
-            token_entry = self._tokens[token]
-            instruments.append(
-                PIIInstrument(
-                    id=consent.pii_method_id,
-                    handler_id=consent.handler_id,
-                    handler_name="example.pii.provider",
-                    fields_stored=sorted(token_entry.allowed_fields),
-                    loan_type=consent.loan_type,
-                    platform_id=platform_id,
-                    credential=PIICredential(type="token", token=token),
-                )
-            )
-
-        return consent_id, instruments
+        try:
+            response = httpx.post(url, json=payload, timeout=30.0)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError:
+            logger.exception("forward_pii: HTTP error sending to %s", url)
+            return None
 
 
-def create_pii_vault_routes(provider: MockPIIProvider) -> list:
-    """Create Starlette routes for PII vault HTTP endpoints.
+# ---------------------------------------------------------------------------
+# HTTP routes
+# ---------------------------------------------------------------------------
 
-    Args:
-        provider: The MockPIIProvider instance to use.
 
-    Returns:
-        List of Starlette Route objects.
-    """
+def create_pii_vault_routes(provider: PIIProvider) -> list:
+    """Create Starlette routes for PII vault HTTP endpoints."""
     from starlette.requests import Request
     from starlette.responses import JSONResponse
     from starlette.routing import Route
 
     async def pii_store_handler(request: Request) -> JSONResponse:
-        """Store PII fields for a user in the mock PII vault."""
         body = await request.json()
-        result = provider.store_pii(body["email"], body["pii_data"])
+        email = body["email"]
+        pii_data = body["pii_data"]
+        logger.info("POST /pii/store — email=%s pii_data=%s", email, pii_data)
+        result = provider.store_pii(email, pii_data)
+        result["email"] = email
+        logger.info("POST /pii/store — result=%s", result)
         return JSONResponse(result)
 
     async def pii_stored_fields_handler(request: Request) -> JSONResponse:
-        """Return stored PII field names for a user."""
         body = await request.json()
         fields = provider.get_stored_fields(body["email"])
         return JSONResponse(
@@ -309,7 +335,6 @@ def create_pii_vault_routes(provider: MockPIIProvider) -> list:
         )
 
     async def pii_consent_handler(request: Request) -> JSONResponse:
-        """Accept a formal PIIConsent, record it, and return platform-scoped tokens."""
         body = await request.json()
         email = body["email"]
         consent = PIIConsent.model_validate(body["consent"])
@@ -320,9 +345,7 @@ def create_pii_vault_routes(provider: MockPIIProvider) -> list:
         return JSONResponse(
             {
                 "consent_id": consent_id,
-                "instruments": [
-                    inst.model_dump(mode="json") for inst in instruments
-                ],
+                "instruments": [inst.model_dump(mode="json") for inst in instruments],
             }
         )
 

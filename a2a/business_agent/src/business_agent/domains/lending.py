@@ -23,7 +23,12 @@ from ..lending_tools import (
     start_lending,
     submit_loan_application,
 )
-from ..models.lending_types import LendingCheckout, LendingResponse, PIIHandler
+from ..models.lending_types import (
+    LendingCheckout,
+    LendingResponse,
+    resolve_lending_handler,
+    resolve_pii_handlers,
+)
 from .base import DomainModule
 
 
@@ -47,15 +52,16 @@ class LendingDomain(DomainModule):
     def agent_instructions(self) -> str:
         return (
             "Loan application workflow:\n"
-            "1. Search available lenders (search_lenders) with optional "
+            "1. Ask the customer for their email address\n"
+            "2. Search available lenders (search_lenders) with optional "
             "loan_type filter\n"
-            "2. Start the lending flow (start_lending) with the desired "
-            "loan type\n"
-            "3. The frontend collects PII directly via the PII vault — "
+            "3. Start the lending flow (start_lending) with the desired "
+            "loan type and the customer's email\n"
+            "4. The frontend collects PII directly via the PII vault — "
             "the agent never handles raw PII data\n"
-            "4. Once PII is complete, the frontend handles PII token "
+            "5. Once PII is complete, the frontend handles PII token "
             "authorization\n"
-            "5. Submit the loan application (submit_loan_application) to "
+            "6. Submit the loan application (submit_loan_application) to "
             "get offers from ALL eligible lenders sorted by rate"
         )
 
@@ -72,8 +78,7 @@ class LendingDomain(DomainModule):
 
     def initialize_checkout_fields(self, checkout, ucp_metadata: dict) -> None:
         if hasattr(checkout, "lending"):
-            pii_handlers = [
-                PIIHandler(**h)
-                for h in ucp_metadata.get("pii", {}).get("handlers", [])
-            ]
-            checkout.lending = LendingResponse(handlers=pii_handlers)
+            checkout.lending = LendingResponse(
+                handlers=resolve_pii_handlers(ucp_metadata),
+                lending_handler=resolve_lending_handler(ucp_metadata),
+            )

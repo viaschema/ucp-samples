@@ -77,6 +77,7 @@ export interface ChatMessage {
   piiRequiredFields?: string[];
   piiLoanType?: string;
   piiCollectionFields?: string[];
+  vgsConfig?: { vgs_vault_id: string; vgs_environment: string };
   nonPIIForm?: { loan_type: string; fields: string[] };
 }
 
@@ -324,8 +325,13 @@ export interface PIIInstrument extends PIIMethod {
 export interface PIIHandler {
   id: string;
   name: string;
-  supported_loan_types?: string[];
   config?: Record<string, unknown>;
+}
+
+export interface LendingHandler {
+  id: string;
+  name: string;
+  supported_loan_types?: string[];
 }
 
 export interface PIIConsent {
@@ -357,6 +363,7 @@ export interface LoanOffer {
 export interface LendingInfo {
   loan_type?: string;
   handlers?: PIIHandler[];
+  lending_handler?: LendingHandler;
   lenders?: Lender[];
   offers?: LoanOffer[];
   status?: string;

@@ -1,57 +1,54 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://viaschema.com/schemas/lending/types/lending_response.json",
-  "title": "Lending Response",
+  "title": "LendingResponse",
   "description": "Container for lending state on a checkout. Tracks the lending workflow from PII collection through offer comparison.",
   "type": "object",
-  "ucp_shared_request": true,
   "additionalProperties": true,
   "properties": {
     "loan_type": {
       "type": ["string", "null"],
-      "description": "Selected loan type.",
-      "enum": ["personal", "car", null]
+      "enum": ["personal", "car", null],
+      "description": "Selected loan type."
     },
     "handlers": {
       "type": "array",
-      "description": "Available PII handlers from the merchant UCP profile.",
-      "items": { "$ref": "pii_handler.json" },
-      "ucp_request": "omit"
+      "items": { "$ref": "https://viaschema.com/schemas/pii/types/pii_handler.json" },
+      "description": "Available PII handlers from the merchant profile."
+    },
+    "lending_handler": {
+      "$ref": "lending_handler.json",
+      "description": "The lending handler managing this flow."
     },
     "lenders": {
       "type": "array",
-      "description": "Available lenders for the selected loan type.",
       "items": { "$ref": "lender.json" },
-      "ucp_request": "omit"
+      "description": "Available lenders for the selected loan type."
     },
     "offers": {
       "type": "array",
-      "description": "Loan offers sorted by rate (ascending). Populated after application submission.",
       "items": { "$ref": "loan_offer.json" },
-      "ucp_request": "omit"
+      "description": "Loan offers sorted by rate (ascending)."
     },
     "status": {
       "type": ["string", "null"],
-      "description": "Lending workflow status.",
-      "enum": ["pii_missing", "consent_needed", "offers_received", null]
+      "enum": ["consent_needed", "pii_missing", "offers_received", null],
+      "description": "Lending workflow status."
     },
     "required_pii_fields": {
       "type": "array",
-      "description": "PII fields required for the selected loan type.",
       "items": { "type": "string" },
-      "ucp_request": "omit"
+      "description": "PII field names required for the loan type."
     },
     "required_non_pii_fields": {
       "type": "array",
-      "description": "Non-PII fields required for the selected loan type (e.g. loan_amount_requested).",
       "items": { "type": "string" },
-      "ucp_request": "omit"
+      "description": "Non-PII field names required for the loan type."
     },
     "missing_pii_fields": {
       "type": "array",
-      "description": "PII fields that still need to be collected or consented.",
       "items": { "type": "string" },
-      "ucp_request": "omit"
+      "description": "PII fields that still need to be collected."
     }
   }
 }

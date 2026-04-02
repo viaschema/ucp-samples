@@ -1,0 +1,51 @@
+data:
+- attributes:
+    host_endpoint: (.*)\.verygoodproxy\.com
+    destination_override_endpoint: 'https://<your-ngrok-id>.ngrok-free.app'
+    ordinal: 0
+    port: 0
+    protocol: http
+    source_endpoint: '*'
+    tags:
+      name: PII Store Inbound Route
+    entries:
+      - classifiers: {}
+        config:
+          condition: AND
+          rules:
+            - expression:
+                field: PathInfo
+                operator: matches
+                type: string
+                values:
+                  - /pii/store
+        id: <your-vgs-route-entry-id>
+        operation: REDACT
+        phase: REQUEST
+        public_token_generator: UUID
+        targets:
+          - body
+        token_manager: PERSISTENT
+        transformer: JSON_PATH
+        transformer_config:
+          - $.pii_data.first_name
+          - $.pii_data.last_name
+          - $.pii_data.email
+          - $.pii_data.phone_number
+          - $.pii_data.date_of_birth
+          - $.pii_data.annual_income
+          - $.pii_data.monthly_housing_payment
+          - $.pii_data.employer_phone_number
+          - $.pii_data.address_street_address
+          - $.pii_data.address_address_locality
+          - $.pii_data.address_address_region
+          - $.pii_data.address_postal_code
+          - $.pii_data.address_address_country
+          - $.pii_data.employer_address_street_address
+          - $.pii_data.employer_address_address_locality
+          - $.pii_data.employer_address_address_region
+          - $.pii_data.employer_address_postal_code
+          - $.pii_data.employer_address_address_country
+  id: <your-vgs-rule-chain-id>
+  type: rule_chain
+version: 1

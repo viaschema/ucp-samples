@@ -3,35 +3,26 @@
   "$id": "https://viaschema.com/schemas/lending/lending.json",
   "name": "com.viaschema.lending",
   "title": "Lending Extension",
-  "description": "Extends Checkout with loan application support including PII collection via trusted third-party providers, multi-lender comparison, and offer generation.",
+  "description": "Extends Checkout with loan application support — lender search, PII collection/consent, multi-lender offer comparison. PII is handled via a separate PII handler; the lending handler is PII-agnostic.",
   "$defs": {
-    "pii_credential": {
-      "$ref": "types/pii_credential.json"
-    },
-    "pii_consent": {
-      "$ref": "types/pii_consent.json"
-    },
-    "pii_instrument": {
-      "$ref": "types/pii_instrument.json"
-    },
-    "pii_handler": {
-      "$ref": "types/pii_handler.json"
-    },
     "lender": {
       "$ref": "types/lender.json"
     },
     "loan_offer": {
       "$ref": "types/loan_offer.json"
     },
-    "borrower_pii": {
-      "$ref": "types/borrower_pii.json"
+    "loan_type": {
+      "$ref": "types/loan_type.json"
+    },
+    "lending_handler": {
+      "$ref": "types/lending_handler.json"
     },
     "lending_response": {
       "$ref": "types/lending_response.json"
     },
     "dev.ucp.shopping.checkout": {
       "title": "Checkout with Lending",
-      "description": "Checkout extended with loan application support.",
+      "description": "Checkout extended with lending application support.",
       "allOf": [
         {
           "$ref": "https://ucp.dev/schemas/shopping/checkout.json"
@@ -55,16 +46,17 @@
     "com.viaschema.lending": {
       "platform_schema": {
         "title": "Lending Capability (Platform)",
-        "description": "Platform-level lending capability configuration.",
+        "description": "Platform-level lending handler configuration. Declares lending marketplaces the merchant supports.",
         "allOf": [
           {
             "$ref": "https://ucp.dev/schemas/capability.json#/$defs/platform_schema"
           },
           {
             "properties": {
-              "config": {
-                "type": "object",
-                "description": "Platform lending configuration."
+              "handlers": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/lending_handler" },
+                "description": "Lending handlers supported by the merchant."
               }
             }
           }
@@ -72,7 +64,7 @@
       },
       "business_schema": {
         "title": "Lending Capability (Business)",
-        "description": "Business-level lending capability configuration.",
+        "description": "Business-level lending configuration.",
         "allOf": [
           {
             "$ref": "https://ucp.dev/schemas/capability.json#/$defs/business_schema"
@@ -92,90 +84,103 @@
   "embedded": {
     "methods": [
       {
-        "name": "ec.lending.pii_collection_request",
-        "summary": "Request PII collection from the user",
-        "description": "Merchant requests the host to present the PII collection UI. The host collects PII directly via the PII vault — the agent never handles raw PII data.",
+        "name": "ec.lending.start",
+        "summary": "Start lending flow",
+        "description": "Initialize the lending extension on the checkout with PII handlers, required fields, and available lenders.",
         "params": [
           {
-            "name": "checkout",
+            "name": "loan_type",
             "required": true,
-            "schema": {
-              "$ref": "https://ucp.dev/schemas/shopping/checkout.json",
-              "description": "Current checkout state with lending context including required_pii_fields and handlers."
-            }
+            "schema": { "$ref": "#/$defs/loan_type" }
+          },
+          {
+            "name": "user_email",
+            "required": true,
+            "schema": { "type": "string", "format": "email", "description": "Customer email for PII lookup." }
           }
         ],
         "result": {
-          "name": "piiCollectionResult",
+          "name": "lendingStartResult",
           "schema": {
             "type": "object",
-            "description": "Result of PII collection. The host stores PII in the vault and returns field status.",
             "required": ["checkout"],
             "properties": {
               "checkout": {
-                "type": "object",
-                "description": "Partial checkout update with updated lending status.",
-                "properties": {
-                  "lending": {
-                    "$ref": "types/lending_response.json",
-                    "description": "Lending state with updated missing_pii_fields and status."
-                  }
-                }
+                "$ref": "#/$defs/dev.ucp.shopping.checkout",
+                "description": "Checkout with initialized lending state."
               }
             }
           }
         }
       },
       {
-        "name": "ec.lending.pii_consent_request",
-        "summary": "Request PII consent from the user",
-        "description": "Merchant requests the host to present the PII consent UI. The user reviews which PII fields will be shared and with which lenders, then provides formal consent. The host sends the consent to the PII vault which validates it and mints platform-scoped tokens.",
+        "name": "ec.lending.submit",
+        "summary": "Submit loan application",
+        "description": "Submit PII instruments and non-PII data to all eligible lenders. Returns aggregated offers sorted by rate.",
         "params": [
           {
-            "name": "checkout",
+            "name": "pii_instruments",
             "required": true,
             "schema": {
-              "$ref": "https://ucp.dev/schemas/shopping/checkout.json",
-              "description": "Current checkout state with lending context including handlers, lenders, and required fields."
+              "type": "array",
+              "items": { "$ref": "https://viaschema.com/schemas/pii/types/pii_instrument.json" },
+              "description": "Platform-scoped PII instruments from consent flow."
+            }
+          },
+          {
+            "name": "loan_application",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "description": "Non-PII loan application data (loan amount, vehicle details, etc.).",
+              "additionalProperties": true
             }
           }
         ],
         "result": {
-          "name": "piiConsentResult",
+          "name": "loanOffersResult",
           "schema": {
             "type": "object",
-            "description": "Result of PII consent. Contains the platform-scoped PII instruments minted by the vault.",
-            "required": ["pii_data"],
+            "required": ["offers"],
             "properties": {
-              "pii_data": {
+              "offers": {
                 "type": "array",
-                "description": "PII instruments with platform-scoped tokens, one per authorized lender.",
-                "items": {
-                  "$ref": "types/pii_instrument.json"
-                }
+                "items": { "$ref": "#/$defs/loan_offer" },
+                "description": "Loan offers from all eligible lenders, sorted by rate ascending."
               },
-              "pii_collection": {
-                "$ref": "types/pii_consent.json",
-                "description": "The formal consent record that was submitted to the vault."
+              "checkout": {
+                "$ref": "#/$defs/dev.ucp.shopping.checkout",
+                "description": "Updated checkout with offers."
               }
             }
           }
         }
       },
       {
-        "name": "ec.lending.offers_received",
-        "summary": "Loan offers received",
-        "description": "Merchant notifies the host that loan offers have been received from lenders and the checkout has been updated.",
+        "name": "ec.lending.lenders",
+        "summary": "List available lenders",
+        "description": "Returns available lenders, optionally filtered by loan type.",
         "params": [
           {
-            "name": "checkout",
-            "required": true,
-            "schema": {
-              "$ref": "https://ucp.dev/schemas/shopping/checkout.json",
-              "description": "Current checkout state with lending.offers populated."
+            "name": "loan_type",
+            "required": false,
+            "schema": { "$ref": "#/$defs/loan_type" }
+          }
+        ],
+        "result": {
+          "name": "lendersResult",
+          "schema": {
+            "type": "object",
+            "required": ["lenders"],
+            "properties": {
+              "lenders": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/lender" },
+                "description": "Available lenders."
+              }
             }
           }
-        ]
+        }
       }
     ]
   }

@@ -13,19 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import type {PIIConsent, PIIInstrument, PIIMethod} from '../types';
+import type {Lender, PIIConsent, PIIInstrument, PIIMethod} from '../types';
 
 /**
- * PII Provider Proxy that communicates with the backend MockPIIProvider
+ * PII Provider Proxy that communicates with the backend PII provider
  * via HTTP endpoints. The backend is the single source of truth for PII
  * storage and token issuance.
  *
- * In a real application, this would call a trusted third-party PII vault
- * service. Here it calls the mock vault endpoints on the backend server.
+ * PII collection is handled by VGS Collect JS (which submits through
+ * the VGS inbound route). This proxy only handles stored-fields queries
+ * and consent submission.
  */
 export class PIIProviderProxy {
-  handler_id = 'example_pii_provider';
-  handler_name = 'example.pii.provider';
+  handler_id = 'vgs_pii_provider';
+  handler_name = 'vgs.pii.provider';
 
   /**
    * Get the PII fields stored for a user from the backend vault.
@@ -58,35 +59,6 @@ export class PIIProviderProxy {
   }
 
   /**
-   * Store PII fields for a user in the backend vault.
-   *
-   * @param user_email The user's email address.
-   * @param pii_data Dictionary of PII field name -> value.
-   * @returns Updated list of stored fields.
-   */
-  async storePII(
-    user_email: string,
-    pii_data: Record<string, string | Record<string, string>>,
-  ): Promise<{fields_stored: string[]}> {
-    console.log(
-      `PIIProviderProxy: Storing PII for ${user_email}:`,
-      Object.keys(pii_data),
-    );
-
-    const response = await fetch('/api/pii/store', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({email: user_email, pii_data}),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to store PII: ${response.status}`);
-    }
-
-    return response.json();
-  }
-
-  /**
    * Submit a formal PIIConsent to the backend vault. The vault validates
    * the consent, records it, and returns platform-scoped tokens.
    *
@@ -112,6 +84,37 @@ export class PIIProviderProxy {
 
     if (!response.ok) {
       throw new Error(`Failed to submit PII consent: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Get available lenders, optionally filtered by loan type.
+   * Mirrors getSupportedPaymentMethods from the payment handler.
+   */
+  async getLenders(
+    loan_type?: string,
+  ): Promise<{lenders: Lender[]}> {
+    const params = loan_type ? `?loan_type=${loan_type}` : '';
+    const response = await fetch(`/api/lending/lenders${params}`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to get lenders: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Get VGS Collect JS configuration from the backend.
+   * The vault ID and environment are server-side secrets, not in ucp.json.
+   */
+  async getCollectConfig(): Promise<{vgs_vault_id: string; vgs_environment: string}> {
+    const response = await fetch('/api/lending/collect-config');
+
+    if (!response.ok) {
+      throw new Error(`Failed to get collect config: ${response.status}`);
     }
 
     return response.json();

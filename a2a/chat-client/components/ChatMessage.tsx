@@ -42,8 +42,9 @@ interface ChatMessageProps {
   onCompletePayment?: (checkout: Checkout) => void;
   isLastCheckout?: boolean;
   onSelectPIIMethod?: (selectedMethod: string) => void;
-  onPIICollected?: (piiData: Record<string, string | Record<string, string>>) => void;
+  onPIICollected?: (result: {fields_stored: string[]}) => void;
   onSubmitNonPII?: (data: Record<string, string>) => void;
+  userEmail?: string;
 }
 
 function TypingIndicator() {
@@ -80,6 +81,7 @@ function ChatMessageComponent({
   onSelectPIIMethod,
   onPIICollected,
   onSubmitNonPII,
+  userEmail,
 }: ChatMessageProps) {
   const isUser = message.sender === Sender.USER;
 
@@ -142,6 +144,7 @@ function ChatMessageComponent({
 
         <LendingRenderer
           message={message}
+          userEmail={userEmail || ''}
           onSelectPIIMethod={onSelectPIIMethod}
           onPIICollected={onPIICollected}
           onSubmitNonPII={onSubmitNonPII}

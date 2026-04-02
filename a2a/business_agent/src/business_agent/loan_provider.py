@@ -22,9 +22,10 @@ The LendingCheckoutManager owns the lending business logic on checkouts.
 
 from __future__ import annotations
 
-import random
-import uuid
+import logging
 from typing import TYPE_CHECKING, Any
+
+logger = logging.getLogger(__name__)
 
 from .models.lending_fields import (
     CAR_LOAN_PII_FIELDS,
@@ -37,11 +38,12 @@ from .models.lending_types import (
     LendingResponse,
     LoanOffer,
     LoanType,
-    PIIHandler,
+    resolve_lending_handler,
+    resolve_pii_handlers,
 )
 
 if TYPE_CHECKING:
-    from .pii_provider import MockPIIProvider
+    from .pii_provider import PIIProvider
     from .store import ServiceStore
 
 # Mock lender directory
@@ -86,16 +88,22 @@ LENDER_LIST: list[Lender] = [
 
 
 class MockLoanProvider:
-    """A single lender that generates mock loan offers.
+    """A single lender that generates loan offers via a lender API.
 
-    Resolves PII via the PII provider using an opaque token,
-    then uses PII data (e.g. annual_income) plus non-PII info
-    to generate 1-3 mock offers.
+    Delegates PII delivery to the PII provider's forward_pii() method.
+    The lending provider never sees raw PII or aliases — it just says
+    "send this token's PII to this URL" and gets offers back.
     """
 
-    def __init__(self, lender: Lender, pii_provider: MockPIIProvider) -> None:
+    def __init__(
+        self,
+        lender: Lender,
+        pii_provider: PIIProvider,
+        lender_api_base: str = "http://localhost:10999/lender-api",
+    ) -> None:
         self.lender = lender
         self._pii_provider = pii_provider
+        self._lender_api_base = lender_api_base
 
     def generate_offers(
         self,
@@ -103,10 +111,11 @@ class MockLoanProvider:
         non_pii_info: dict[str, Any],
         loan_type: str,
     ) -> list[LoanOffer]:
-        """Generate mock loan offers for this lender.
+        """Generate loan offers by forwarding PII to the lender API.
 
-        Resolves the PII token to get user data, then generates
-        1-3 offers with randomized rates and terms.
+        The PII provider handles the delivery — this method never sees
+        raw PII or aliases. It just provides the token, the destination
+        URL, and the non-PII data to include.
 
         Args:
             pii_token: Opaque PII token from the provider.
@@ -116,43 +125,33 @@ class MockLoanProvider:
         Returns:
             List of LoanOffer objects from this lender.
         """
-        pii_data = self._pii_provider.resolve_token(pii_token, self.lender.platform_id)
-        if pii_data is None:
+        logger.info(
+            "generate_offers: lender=%s platform_id=%s",
+            self.lender.lender_name,
+            self.lender.platform_id,
+        )
+
+        url = f"{self._lender_api_base}/{self.lender.platform_id}/apply"
+        result = self._pii_provider.forward_pii(
+            token=pii_token,
+            platform_id=self.lender.platform_id,
+            url=url,
+            extra_data={
+                "loan_type": loan_type,
+                "lender_name": self.lender.lender_name,
+                **non_pii_info,
+            },
+        )
+
+        if result is None:
+            logger.warning(
+                "generate_offers: forward_pii returned None for lender=%s",
+                self.lender.lender_name,
+            )
             return []
 
-        loan_amount = float(non_pii_info.get("loan_amount_requested", 10000))
-        if loan_type == LoanType.CAR:
-            loan_amount = float(non_pii_info.get("car_value", 25000))
-
-        offers: list[LoanOffer] = []
-        num_offers = random.randint(1, 3)
-
-        for _ in range(num_offers):
-            rate = round(random.uniform(5.99, 15.99), 2)
-            term_months = random.choice([24, 36, 48, 60, 72])
-            monthly_rate = rate / 100 / 12
-            monthly_payment = round(
-                loan_amount
-                * (monthly_rate * (1 + monthly_rate) ** term_months)
-                / ((1 + monthly_rate) ** term_months - 1),
-                2,
-            )
-
-            offers.append(
-                LoanOffer(
-                    lender_name=self.lender.lender_name,
-                    rate=rate,
-                    amount=loan_amount,
-                    term_months=term_months,
-                    monthly_payment=monthly_payment,
-                    continue_url=(
-                        f"https://{self.lender.platform_id}.example.com"
-                        f"/apply/{uuid.uuid4()}"
-                    ),
-                )
-            )
-
-        return offers
+        offers_data = result.get("offers", [])
+        return [LoanOffer(**o) for o in offers_data]
 
 
 class LoanProviderRegistry:
@@ -162,10 +161,15 @@ class LoanProviderRegistry:
     for lender search and aggregated offer generation.
     """
 
-    def __init__(self, pii_provider: MockPIIProvider) -> None:
+    def __init__(
+        self,
+        pii_provider: PIIProvider,
+        lender_api_base: str = "http://localhost:10999/lender-api",
+    ) -> None:
         self._pii_provider = pii_provider
         self._providers: list[MockLoanProvider] = [
-            MockLoanProvider(lender, pii_provider) for lender in LENDER_LIST
+            MockLoanProvider(lender, pii_provider, lender_api_base)
+            for lender in LENDER_LIST
         ]
 
     def get_required_pii_fields(self, loan_type: str) -> list[str]:
@@ -256,7 +260,7 @@ class LendingCheckoutManager:
     def __init__(
         self,
         store: ServiceStore,
-        pii_provider: MockPIIProvider,
+        pii_provider: PIIProvider,
         loan_registry: LoanProviderRegistry,
         ucp_metadata: dict[str, Any],
     ) -> None:
@@ -290,10 +294,8 @@ class LendingCheckoutManager:
         if checkout is None:
             raise ValueError(f"Checkout with ID {checkout_id} not found")
 
-        pii_handlers = [
-            PIIHandler(**h)
-            for h in self._ucp_metadata.get("pii", {}).get("handlers", [])
-        ]
+        pii_handlers = resolve_pii_handlers(self._ucp_metadata)
+        lending_handler = resolve_lending_handler(self._ucp_metadata)
         required_pii = self._loan_registry.get_required_pii_fields(loan_type)
         required_non_pii = self._loan_registry.get_required_non_pii_fields(loan_type)
         missing_pii = (
@@ -308,6 +310,7 @@ class LendingCheckoutManager:
         checkout.lending = LendingResponse(
             loan_type=loan_type,
             handlers=pii_handlers,
+            lending_handler=lending_handler,
             lenders=lenders,
             status=status,
             required_pii_fields=required_pii,
