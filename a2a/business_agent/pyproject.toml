@@ -11,6 +11,8 @@ dependencies = [
     "httpx>=0.28.1",
     "ucp-sdk==0.1.0",
     "squareup>=40.0.0",
+    "vgs-cli>=1.30.19",
+    "vgs-api-client>=0.0.51",
 ]
 
 [project.scripts]

@@ -45,6 +45,8 @@ State is stored in ADK's session service (in-memory by default).
 | `__ucp_metadata__` | Negotiated capabilities from client/merchant profiles | Set once per session |
 | `__payment_data__` | Payment instrument for current checkout | Set during payment flow |
 | `__session_extensions__` | Active A2A extensions for this session | Set once per session |
+| `__pii_data__` | PII instruments for current lending flow | Set during PII consent |
+| `customer_email` | Customer email for PII lookups | Set by `start_lending` tool |
 | `temp:LATEST_TOOL_RESULT` | Temporary storage for last UCP tool response | Cleared after each agent response |
 
 **Naming conventions**:
@@ -93,6 +95,23 @@ The checkout follows a 3-state lifecycle:
 
 ---
 
+## Lending & PII Terms
+
+| Term | Definition | Example in This Sample |
+|------|------------|------------------------|
+| **PII Provider** | A trusted third-party service that securely collects, stores, and delivers PII. Declared in `pii.handlers[]` in `ucp.json`. | VGS (`vgs_pii_provider`) or in-memory mock (`MockPIIProvider`) |
+| **Lending Handler** | A marketplace service that manages lenders and loan applications. Declared in `lending.handlers[]` in `ucp.json`. PII-agnostic. | `marketplace_lending` |
+| **VGS** | Very Good Security — a vault service for PII tokenization. Raw data stored in VGS vault; backend works only with opaque aliases. | `VGSPIIProvider` in `vgs_pii_provider.py` |
+| **Alias** | An opaque VGS token (e.g., `tok_sandbox_abc123`) that references a value stored in the VGS vault. | Stored in `_stored_aliases` dict |
+| **PIIInstrument** | A token-based PII reference scoped to a specific lender platform. Mirrors `PaymentInstrument`. | Contains `credential.token`, `platform_id`, `handler_id` |
+| **PIIConsent** | User authorization to share specific PII fields with specific lenders. | Built by frontend, sent to `/pii/consent` |
+| **Inbound Route** | VGS reverse proxy route that tokenizes (REDACTs) PII in transit before it reaches the backend. | `routes/inbound_pii_store.yaml` |
+| **Outbound Route** | VGS forward proxy route that enriches (detokenizes) aliases before they reach a lender API. | `routes/outbound_lender.yaml` |
+| **forward_pii()** | PII provider method that sends tokenized PII to a URL. VGS provider routes through outbound proxy; mock sends directly. | Called by `MockLoanProvider.generate_offers()` |
+| **BasePIIProvider** | ABC with shared token/consent logic. `MockPIIProvider` and `VGSPIIProvider` extend it. | `pii_provider.py` |
+
+---
+
 ## Common Acronyms
 
 | Acronym | Full Name | Context |
@@ -102,6 +121,9 @@ The checkout follows a 3-state lifecycle:
 | ADK | Agent Development Kit | Google's agent framework |
 | LLM | Large Language Model | Gemini 3.0 Flash in this sample |
 | SDK | Software Development Kit | UCP Python SDK |
+| VGS | Very Good Security | PII tokenization vault service |
+| PII | Personally Identifiable Information | Name, email, SSN, address, etc. |
+| SRI | Subresource Integrity | Browser security for CDN scripts |
 
 ---
 
@@ -155,3 +177,5 @@ Official documentation for the core technologies used in this sample.
 - [ADK Agent Guide](02-adk-agent.md) - Tool and callback patterns
 - [UCP Integration](03-ucp-integration.md) - Capability negotiation
 - [Commerce Flows](04-commerce-flows.md) - Checkout state machine
+- [VGS PII Integration](11-vgs-pii-integration.md) - VGS tokenization architecture
+- [Lending Integration Tests](09-lending-integration-tests.md) - Test guide for lending flows

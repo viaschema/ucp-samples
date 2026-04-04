@@ -35,6 +35,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import FileResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
@@ -42,7 +44,9 @@ import uvicorn
 
 from .agent import root_agent as business_agent
 from .agent_executor import ADKAgentExecutor
-from .lending_tools import pii_provider
+from .dependencies import create_lending_dependencies
+from .lender_api import create_lender_api_routes
+from .lending_tools import init_lending
 from .pii_provider import create_pii_vault_routes
 
 logging.basicConfig(level=logging.INFO)
@@ -73,6 +77,35 @@ def make_sync(func):
     return wrapper
 
 
+def _create_lending_routes(registry) -> list:
+    """Create routes for lending handler discovery endpoints."""
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    async def lenders_handler(request: Request) -> JSONResponse:
+        """Return available lenders, optionally filtered by loan_type."""
+        loan_type = request.query_params.get("loan_type")
+        lenders = registry.get_lenders(loan_type=loan_type)
+        return JSONResponse(
+            {"lenders": [lender.model_dump(mode="json") for lender in lenders]}
+        )
+
+    async def collect_config_handler(request: Request) -> JSONResponse:
+        """Return VGS Collect JS config (vault ID + environment)."""
+        return JSONResponse(
+            {
+                "vgs_vault_id": os.getenv("VGS_VAULT_ID", ""),
+                "vgs_environment": os.getenv("VGS_ENVIRONMENT", "sandbox"),
+            }
+        )
+
+    return [
+        Route("/lending/lenders", lenders_handler, methods=["GET"]),
+        Route("/lending/collect-config", collect_config_handler, methods=["GET"]),
+    ]
+
+
 @click.command()
 @click.option("--host", default="localhost")
 @click.option("--port", default=10999)
@@ -94,6 +127,10 @@ async def run(host, port):
     with card_path.open(encoding="utf-8") as f:
         data = json.load(f)
     agent_card = AgentCard.model_validate(data)
+
+    # Initialize lending dependencies (reads env vars + ucp_metadata now, not at import time)
+    pii_provider, loan_registry, lending_mgr = create_lending_dependencies()
+    init_lending(pii_provider, loan_registry, lending_mgr)
 
     task_store = InMemoryTaskStore()
 
@@ -121,9 +158,26 @@ async def run(host, port):
                 name="images",
             ),
             *create_pii_vault_routes(pii_provider),
+            *_create_lending_routes(loan_registry),
+            *create_lender_api_routes(),
         ]
     )
-    app = Starlette(routes=routes)
+    # Allow requests from VGS Collect JS (sandbox and live reverse proxy origins).
+    vgs_vault_id = os.getenv("VGS_VAULT_ID", "")
+    cors_origins = [
+        f"https://{vgs_vault_id}.sandbox.verygoodproxy.com",
+        f"https://{vgs_vault_id}.live.verygoodproxy.com",
+        "http://localhost:5173",  # Vite dev server
+    ]
+    middleware = [
+        Middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Content-Type"],
+        ),
+    ]
+    app = Starlette(routes=routes, middleware=middleware)
 
     config = uvicorn.Config(app, host=host, port=port, log_level="info")
     server = uvicorn.Server(config)

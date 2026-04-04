@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viaschema.com/schemas/lending/types/loan_type.json",
+  "title": "LoanType",
+  "description": "Supported loan types.",
+  "type": "string",
+  "enum": ["personal", "car"]
+}

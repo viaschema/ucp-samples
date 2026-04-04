@@ -16,12 +16,16 @@
 
 Contains all lending-related ADK tools: search_lenders, get_pii_requirements,
 start_lending, and submit_loan_application.
+
+Dependencies (pii_provider, loan_registry, lending_manager) are injected
+via init_lending() called from main.py — no import-time side effects.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from a2a.types import TaskState
 from google.adk.tools.tool_context import ToolContext
@@ -35,15 +39,28 @@ from .constants import (
     UCP_PII_DATA_KEY,
 )
 from .dependencies import store
-from .loan_provider import LendingCheckoutManager, LoanProviderRegistry
 from .models.lending_types import PIIInstrument
-from .pii_provider import MockPIIProvider
 
-pii_provider = MockPIIProvider()
-loan_registry = LoanProviderRegistry(pii_provider)
-lending_manager = LendingCheckoutManager(
-    store, pii_provider, loan_registry, store.ucp_metadata
-)
+if TYPE_CHECKING:
+    from .loan_provider import LendingCheckoutManager, LoanProviderRegistry
+    from .pii_provider import PIIProvider
+
+# Module-level references — set by init_lending(), used by tool functions.
+pii_provider: PIIProvider
+loan_registry: LoanProviderRegistry
+lending_manager: LendingCheckoutManager
+
+
+def init_lending(
+    pii_prov: PIIProvider,
+    registry: LoanProviderRegistry,
+    manager: LendingCheckoutManager,
+) -> None:
+    """Initialize lending module dependencies. Called from main.py."""
+    global pii_provider, loan_registry, lending_manager
+    pii_provider = pii_prov
+    loan_registry = registry
+    lending_manager = manager
 
 
 def _create_error_response(message: str) -> dict:
@@ -111,7 +128,7 @@ def get_pii_requirements(tool_context: ToolContext, loan_type: str) -> dict:
         )
 
 
-def start_lending(tool_context: ToolContext, loan_type: str) -> dict:
+def start_lending(tool_context: ToolContext, loan_type: str, user_email: str) -> dict:
     """Start the lending flow by setting up PII requirements on the checkout.
 
     This initializes the lending extension on the checkout with PII handlers,
@@ -121,6 +138,7 @@ def start_lending(tool_context: ToolContext, loan_type: str) -> dict:
     Args:
         tool_context: The tool context for the current request.
         loan_type: The loan type ('personal' or 'car').
+        user_email: The customer's email address, used to check for existing PII.
 
     Returns:
         dict: Returns the checkout with lending info.
@@ -137,7 +155,8 @@ def start_lending(tool_context: ToolContext, loan_type: str) -> dict:
             checkout_id, _ = store.create_empty_checkout(ucp_metadata)
             tool_context.state[ADK_USER_CHECKOUT_ID] = checkout_id
 
-        user_email = tool_context.state.get("customer_email")
+        # Persist email in state for other tools in this session
+        tool_context.state["customer_email"] = user_email
         checkout = lending_manager.start_lending(checkout_id, loan_type, user_email)
 
         return {
@@ -226,10 +245,15 @@ async def submit_loan_application(tool_context: ToolContext) -> dict:
         # Get non-PII data from the state
         non_pii_info = pii_state.get(UCP_LOAN_APPLICATION_KEY, {})
 
-        # Query ALL eligible lenders and get aggregated offers
+        # Query ALL eligible lenders and get aggregated offers.
+        # Run in a thread to avoid blocking the event loop — the lender
+        # API calls may route back to this server via VGS outbound proxy.
         loan_type = checkout.lending.loan_type
-        offers = loan_registry.apply_for_all_lenders(
-            pii_tokens, loan_type, non_pii_info
+        offers = await asyncio.to_thread(
+            loan_registry.apply_for_all_lenders,
+            pii_tokens,
+            loan_type,
+            non_pii_info,
         )
 
         # Update checkout with offers

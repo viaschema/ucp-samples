@@ -4,7 +4,7 @@
   "title": "Lender",
   "description": "A lending institution that offers loans.",
   "type": "object",
-  "required": ["lender_name", "loan_types_offered", "platform_id"],
+  "required": ["lender_name", "loan_types_offered", "description", "platform_id"],
   "additionalProperties": true,
   "properties": {
     "lender_name": {
@@ -13,11 +13,8 @@
     },
     "loan_types_offered": {
       "type": "array",
-      "description": "Loan types this lender supports.",
-      "items": {
-        "type": "string",
-        "enum": ["personal", "car"]
-      }
+      "items": { "type": "string", "enum": ["personal", "car"] },
+      "description": "Loan types this lender supports."
     },
     "description": {
       "type": "string",
@@ -25,7 +22,7 @@
     },
     "platform_id": {
       "type": "string",
-      "description": "Unique platform identifier used for token scoping."
+      "description": "Unique platform identifier used for token scoping and API routing."
     }
   }
 }

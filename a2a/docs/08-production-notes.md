@@ -84,6 +84,19 @@ logger.info(f"Processing payment for checkout {checkout_id}")
 # NOT: logger.info(f"Payment data: {payment_data}")
 ```
 
+### 5. PII Security
+
+The sample includes VGS integration for PII tokenization. In production:
+
+- **Use VGS outbound routes** for all lender API calls — the backend should never call `resolve_token()` / `aliases.reveal()` directly
+- **Rotate VGS credentials** periodically (runtime username/password, service account)
+- **PII alias mapping** (`_stored_aliases`) is in-memory and lost on restart — use a persistent store (database, Redis) in production
+- **VGS Collect JS** must use an SRI integrity hash (already configured in `index.html`)
+- **SSL verification** is disabled in sandbox mode — always enable in production (`verify=True` in httpx client)
+- **Never log PII values** — log field names and alias IDs only, not resolved values
+
+See [VGS PII Integration](11-vgs-pii-integration.md) for the full architecture.
+
 ---
 
 ## Concurrency Issues

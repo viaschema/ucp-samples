@@ -113,7 +113,7 @@ class PIIHandler(BaseModel):
     """A PII handler from the merchant's UCP profile.
 
     Represents a trusted third-party PII provider that can collect
-    and store user PII on behalf of the merchant.
+    and store user PII on behalf of the merchant (e.g. VGS, OneTrust).
     """
 
     model_config = ConfigDict(extra="allow")
@@ -125,11 +125,25 @@ class PIIHandler(BaseModel):
     config_schema: str | None = Field(
         default=None, description="Handler config schema URL"
     )
-    supported_loan_types: list[str] | None = Field(
-        default=None, description="Loan types this handler supports"
-    )
     config: dict[str, Any] | None = Field(
         default=None, description="Handler configuration"
+    )
+
+
+class LendingHandler(BaseModel):
+    """A lending handler from the merchant's UCP profile.
+
+    Represents a lending marketplace that provides lenders and manages
+    loan applications. References PII handler(s) it works with.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str = Field(description="Handler identifier")
+    name: str = Field(description="Handler name")
+    version: str | None = Field(default=None, description="Handler version")
+    supported_loan_types: list[str] | None = Field(
+        default=None, description="Loan types this handler supports"
     )
 
 
@@ -147,6 +161,9 @@ class LendingResponse(BaseModel):
     )
     handlers: list[PIIHandler] | None = Field(
         default=None, description="Available PII handlers from merchant profile"
+    )
+    lending_handler: LendingHandler | None = Field(
+        default=None, description="The lending handler managing this flow"
     )
     lenders: list[Lender] | None = Field(
         default=None, description="Available lenders for the loan type"
@@ -170,6 +187,36 @@ class LendingResponse(BaseModel):
         default=None,
         description="PII fields that still need to be collected",
     )
+
+
+# ---------------------------------------------------------------------------
+# Handler resolution helpers — single source of truth for parsing ucp_metadata
+# ---------------------------------------------------------------------------
+
+
+def resolve_pii_handlers(ucp_metadata: dict) -> list[PIIHandler]:
+    """Resolve PII handlers from UCP metadata."""
+    return [
+        PIIHandler(**h)
+        for h in ucp_metadata.get("pii", {}).get("handlers", [])
+    ]
+
+
+def resolve_lending_handler(ucp_metadata: dict) -> LendingHandler | None:
+    """Resolve the active lending handler from UCP metadata.
+
+    Currently supports exactly one lending handler. Raises ValueError
+    if multiple are configured (not yet supported).
+    """
+    handlers_raw = ucp_metadata.get("lending", {}).get("handlers", [])
+    if not handlers_raw:
+        return None
+    if len(handlers_raw) > 1:
+        raise ValueError(
+            f"Multiple lending handlers not yet supported "
+            f"(found {len(handlers_raw)}). Use exactly one."
+        )
+    return LendingHandler(**handlers_raw[0])
 
 
 # Checkout extension types

@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viaschema.com/schemas/pii/pii.json",
+  "name": "com.viaschema.pii",
+  "title": "PII Collection Extension",
+  "description": "Provides secure PII collection, storage, and delivery via trusted third-party providers (e.g., VGS). The agent never sees raw PII — only opaque tokens.",
+  "$defs": {
+    "pii_credential": {
+      "$ref": "types/pii_credential.json"
+    },
+    "pii_consent": {
+      "$ref": "types/pii_consent.json"
+    },
+    "pii_instrument": {
+      "$ref": "types/pii_instrument.json"
+    },
+    "pii_handler": {
+      "$ref": "types/pii_handler.json"
+    },
+    "borrower_pii": {
+      "$ref": "types/borrower_pii.json"
+    }
+  },
+  "com.viaschema.pii": {
+    "platform_schema": {
+      "title": "PII Capability (Platform)",
+      "description": "Platform-level PII handler configuration. Declares which PII providers the merchant supports.",
+      "allOf": [
+        {
+          "$ref": "https://ucp.dev/schemas/capability.json#/$defs/platform_schema"
+        },
+        {
+          "properties": {
+            "handlers": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/pii_handler" },
+              "description": "PII handlers supported by the merchant."
+            }
+          }
+        }
+      ]
+    },
+    "business_schema": {
+      "title": "PII Capability (Business)",
+      "description": "Business-level PII configuration.",
+      "allOf": [
+        {
+          "$ref": "https://ucp.dev/schemas/capability.json#/$defs/business_schema"
+        },
+        {
+          "properties": {
+            "config": {
+              "type": "object",
+              "description": "Business PII configuration."
+            }
+          }
+        }
+      ]
+    }
+  },
+  "embedded": {
+    "methods": [
+      {
+        "name": "ec.pii.store",
+        "summary": "Store PII data",
+        "description": "Store PII fields for a user in the PII vault. Values may be raw or VGS aliases depending on the inbound route.",
+        "params": [
+          {
+            "name": "email",
+            "required": true,
+            "schema": { "type": "string", "description": "User's email address." }
+          },
+          {
+            "name": "pii_data",
+            "required": true,
+            "schema": {
+              "$ref": "#/$defs/borrower_pii",
+              "description": "PII field values (or VGS aliases) to store."
+            }
+          }
+        ]
+      },
+      {
+        "name": "ec.pii.consent",
+        "summary": "Submit PII consent",
+        "description": "User authorizes sharing specific PII fields with specific lender platforms. The PII provider validates the consent, records it, and mints platform-scoped tokens.",
+        "params": [
+          {
+            "name": "email",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "consent",
+            "required": true,
+            "schema": { "$ref": "#/$defs/pii_consent" }
+          }
+        ],
+        "result": {
+          "name": "consentResult",
+          "schema": {
+            "type": "object",
+            "required": ["consent_id", "instruments"],
+            "properties": {
+              "consent_id": { "type": "string", "description": "Unique consent record ID." },
+              "instruments": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/pii_instrument" },
+                "description": "One PIIInstrument per consented platform, each with a platform-scoped token."
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

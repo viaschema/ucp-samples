@@ -23,7 +23,7 @@ import type React from 'react';
 import LenderCard from '../components/LenderCard';
 import LoanOfferComparison from '../components/LoanOfferComparison';
 import NonPIIForm from '../components/NonPIIForm';
-import PIICollectionForm from '../components/PIICollectionForm';
+import VGSPIICollectionForm from '../components/VGSPIICollectionForm';
 import PIIConsentSelector from '../components/PIIConsentSelector';
 import type {ChatMessage, Lender, LoanOffer} from '../types';
 import type {ResponseHandler} from './registry';
@@ -59,13 +59,15 @@ export function lendingHasContent(msg: ChatMessage): boolean {
 
 export interface LendingRendererProps {
   message: ChatMessage;
+  userEmail: string;
   onSelectPIIMethod?: (method: string) => void;
-  onPIICollected?: (data: Record<string, string | Record<string, string>>) => void;
+  onPIICollected?: (result: {fields_stored: string[]}) => void;
   onSubmitNonPII?: (data: Record<string, string>) => void;
 }
 
 export const LendingRenderer: React.FC<LendingRendererProps> = ({
   message,
+  userEmail,
   onSelectPIIMethod,
   onPIICollected,
   onSubmitNonPII,
@@ -99,9 +101,12 @@ export const LendingRenderer: React.FC<LendingRendererProps> = ({
         />
       )}
 
-      {message.piiCollectionFields && message.piiCollectionFields.length > 0 && onPIICollected && (
-        <PIICollectionForm
+      {message.piiCollectionFields && message.piiCollectionFields.length > 0 && onPIICollected && message.vgsConfig && (
+        <VGSPIICollectionForm
           missingFields={message.piiCollectionFields}
+          vaultId={message.vgsConfig.vgs_vault_id}
+          environment={message.vgsConfig.vgs_environment}
+          userEmail={userEmail}
           onSubmit={onPIICollected}
         />
       )}

@@ -65,7 +65,7 @@ const initialMessage: ChatMessage = createChatMessage(
  * Only for demo purposes, not intended for production use.
  */
 function App() {
-  const [user_email, _setUserEmail] = useState<string | null>('foo@example.com');
+  const [user_email, setUserEmail] = useState<string | null>('foo@example.com');
   const [messages, setMessages] = useState<ChatMessage[]>([initialMessage]);
   const [isLoading, setIsLoading] = useState(false);
   const [contextId, setContextId] = useState<string | null>(null);
@@ -276,9 +276,10 @@ function App() {
       return;
     }
 
-    const handler = checkout.lending.handlers.find(
-      (h: PIIHandler) => h.id === 'example_pii_provider',
-    );
+    // PII handlers are declared independently in pii.handlers.
+    // The lending provider is PII-agnostic — it doesn't reference
+    // which PII handler to use. The frontend discovers it directly.
+    const handler = checkout.lending.handlers?.[0];
     if (!handler) {
       const errorMessage = createChatMessage(
         Sender.MODEL,
@@ -290,16 +291,20 @@ function App() {
 
     try {
       // Use the backend's missing_pii_fields as the source of truth.
-      // The backend tracks what PII it has received; the frontend vault
-      // may have data the backend hasn't seen yet.
       const backendMissing = checkout.lending.missing_pii_fields || [];
 
       if (backendMissing.length > 0) {
-        // Path B: Backend says fields are missing - show collection form
+        // Path B: Backend says fields are missing - fetch VGS config and show form
+        const vgsConfig = await piiProvider.current.getCollectConfig();
         const collectionMessage = createChatMessage(
           Sender.MODEL,
           'Some personal information is missing. Please fill in the required fields below.',
-          {piiCollectionFields: backendMissing},
+          {
+            piiCollectionFields: backendMissing,
+            vgsConfig: vgsConfig.vgs_vault_id
+              ? vgsConfig
+              : undefined,
+          },
         );
         setMessages((prev) => [...prev, collectionMessage]);
       } else {
@@ -328,8 +333,15 @@ function App() {
     }
   };
 
-  const handlePIICollected = async (piiData: Record<string, string | Record<string, string>>) => {
-    // Hide the collection form
+  const handlePIICollected = async (result: {fields_stored: string[]; email?: string}) => {
+    // VGS Collect already stored the data via the inbound route.
+    // Update user_email if the form provided one.
+    if (result.email) {
+      setUserEmail(result.email);
+    }
+    const effectiveEmail = result.email || user_email;
+
+    // Hide the collection form and proceed to consent.
     setMessages((prev) => prev.filter((msg) => !msg.piiCollectionFields));
 
     const userActionMessage = createChatMessage(
@@ -340,14 +352,11 @@ function App() {
     setMessages((prev) => [...prev, userActionMessage]);
 
     try {
-      if (!user_email) throw new Error('User email is not set.');
-
-      // Store PII with the provider
-      await piiProvider.current.storePII(user_email, piiData);
+      if (!effectiveEmail) throw new Error('User email is not set.');
 
       // Now get PII methods (should have all fields stored)
       const piiResponse = await piiProvider.current.getStoredPIIFields(
-        user_email,
+        effectiveEmail,
         {},
       );
 
@@ -362,10 +371,10 @@ function App() {
       });
       setMessages((prev) => [...prev, piiSelectorMessage]);
     } catch (error) {
-      console.error('Failed to store PII:', error);
+      console.error('Failed to process PII submission:', error);
       const errorMessage = createChatMessage(
         Sender.MODEL,
-        "Sorry, I couldn't store your information. Please try again.",
+        "Sorry, I couldn't process your information. Please try again.",
       );
       setMessages((prev) => [...prev, errorMessage]);
     }
@@ -385,14 +394,21 @@ function App() {
     try {
       if (!user_email) throw new Error('User email is not set.');
 
-      // Build a formal PIIConsent from the checkout context
+      // Build a formal PIIConsent from the checkout context.
+      // Discover PII handler dynamically from the lending handler reference.
       const lastCheckoutMsg = [...messages].reverse().find((m) => m.checkout?.lending);
       const lending = lastCheckoutMsg?.checkout?.lending;
       const lenders = lending?.lenders || [];
+      const piiHandler = lending?.handlers?.[0];
+      if (!piiHandler) {
+        throw new Error(
+          'No PII handler configured. Check pii.handlers in ucp.json.',
+        );
+      }
 
       const consent: PIIConsent = {
         pii_method_id: selectedMethodId,
-        handler_id: 'example_pii_provider',
+        handler_id: piiHandler.id,
         fields_consented: lending?.required_pii_fields || [],
         loan_type: lending?.loan_type || 'personal',
         platform_ids: lenders.map((l) => l.platform_id),
@@ -671,7 +687,8 @@ function App() {
             isLastCheckout={index === lastCheckoutIndex}
             onSelectPIIMethod={handlePIIMethodSelected}
             onPIICollected={handlePIICollected}
-            onSubmitNonPII={handleSubmitNonPII}></ChatMessageComponent>
+            onSubmitNonPII={handleSubmitNonPII}
+            userEmail={user_email || undefined}></ChatMessageComponent>
         ))}
       </main>
       <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />

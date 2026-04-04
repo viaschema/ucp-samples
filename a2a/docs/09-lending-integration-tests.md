@@ -4,10 +4,11 @@
 
 This document describes how to verify the UCP lending extension end-to-end, covering:
 
-1. Unit tests for MockPIIProvider and lending models
+1. Unit tests for PII providers (MockPIIProvider / VGSPIIProvider) and lending models
 2. PII collection flow (new user with no stored PII)
-3. Multi-lender offer aggregation
-4. A2A integration test via curl
+3. Multi-lender offer aggregation via lender API
+4. Incremental PII collection across loan types
+5. A2A integration test via curl
 5. Capability negotiation verification
 
 ## Prerequisites
@@ -36,17 +37,27 @@ python -m pytest tests/test_lending.py -v
 |-------|-------|----------------|
 | `TestMockPIIProvider` | 16 | store_pii, get_missing_fields, token issuance/validation, field requirements |
 | `TestLenderSearch` | 5 | Lender filtering by loan type, fuzzy search |
-| `TestMultiLenderOffers` | 6 | Multi-lender aggregation, rate sorting, offer validation |
-| `TestPIICollectionFlow` | 2 | Full new-user flow, incremental collection |
+| `TestMultiLenderOffers` | 6 | Multi-lender aggregation via mock HTTP transport, rate sorting, offer validation |
+| `TestPIICollectionFlow` | 3 | Full new-user flow, incremental collection, cross-loan-type delta |
 | `TestCapabilityNegotiation` | 5 | type_generator includes/excludes lending, model validation |
+| `TestLoanProviderRegistry` | 7 | Registry creates providers, single provider offers, field requirements |
+| `TestPIIVaultEndpoints` | 6 | HTTP endpoints for store, stored-fields, consent |
 
-Run all tests (lending + existing appointment) to verify no regressions:
+**Note**: Tests use `PII_PROVIDER=mock` and a mock HTTP transport (`httpx.MockTransport`) so they don't need VGS credentials or a running server. The `loan_registry` fixture patches `httpx.post` to route lender API calls in-process.
+
+Run all tests to verify no regressions:
 
 ```bash
-python -m pytest tests/ -v
+PII_PROVIDER=mock python -m pytest tests/ -v
 ```
 
-Expected: 90 tests pass (25 appointment + 34 lending + 31 shopping/integration).
+Expected: 91 tests pass.
+
+### Provider Architecture
+
+Both `MockPIIProvider` and `VGSPIIProvider` extend `BasePIIProvider`, which implements shared token/consent logic. Tests exercise the mock provider; the VGS provider uses the same base class methods and is tested via integration tests with real VGS credentials.
+
+See [VGS PII Integration](11-vgs-pii-integration.md) for the full VGS architecture.
 
 ## 2. PII Collection Flow Test
 

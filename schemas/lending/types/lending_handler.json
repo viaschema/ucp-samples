@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viaschema.com/schemas/lending/types/lending_handler.json",
+  "title": "LendingHandler",
+  "description": "A lending handler from the merchant's UCP profile. Represents a lending marketplace that manages lenders and loan applications. PII-agnostic — does not reference PII handlers.",
+  "type": "object",
+  "required": ["id", "name"],
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Handler identifier (e.g., 'marketplace_lending')."
+    },
+    "name": {
+      "type": "string",
+      "description": "Handler dotted name (e.g., 'marketplace.lending.provider')."
+    },
+    "version": {
+      "type": "string",
+      "description": "Handler version."
+    },
+    "supported_loan_types": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["personal", "car"] },
+      "description": "Loan types this handler supports."
+    }
+  }
+}

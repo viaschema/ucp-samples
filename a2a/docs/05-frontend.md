@@ -120,7 +120,7 @@ Adding a new domain's response keys only requires registering handlers in `domai
 |----------|--------|----------------|
 | `ShoppingRenderer` | Shopping | ProductCard, Checkout, PaymentMethodSelector, PaymentConfirmation |
 | `AppointmentRenderer` | Appointments | ServiceCard, LocationCard, AvailabilitySlots, BookingCard |
-| `LendingRenderer` | Lending | LenderCard, LoanOfferComparison, PIIConsentSelector, PIICollectionForm, NonPIIForm |
+| `LendingRenderer` | Lending | LenderCard, LoanOfferComparison, PIIConsentSelector, VGSPIICollectionForm, NonPIIForm |
 
 ### Shared Components
 
@@ -235,6 +235,37 @@ class CredentialProviderProxy {
   }
 }
 ```
+
+## PIIProviderProxy
+
+PII provider proxy in `mocks/piiProviderProxy.ts` — parallels `CredentialProviderProxy` for the lending flow:
+
+```typescript
+class PIIProviderProxy {
+  handler_id = 'vgs_pii_provider';
+  handler_name = 'vgs.pii.provider';
+
+  async getStoredPIIFields(email, config)     // → POST /api/pii/stored-fields
+  async submitConsent(email, consent)          // → POST /api/pii/consent
+  async getLenders(loan_type?)                 // → GET /api/lending/lenders
+  async getCollectConfig()                     // → GET /api/lending/collect-config
+}
+```
+
+### VGS Collect JS Form
+
+`VGSPIICollectionForm.tsx` renders all PII fields as VGS Collect iframes. Uses proper VGS field types:
+
+| VGS Type | Fields Using It |
+|----------|-----------------|
+| `text` | first_name, last_name, email, phone, income, street, city |
+| `date` | date_of_birth (with min date validation) |
+| `dropdown` | country, state, living_situation, employment_status |
+| `zip-code` | postal_code |
+
+The form submits through the VGS reverse proxy (`https://<vault_id>.sandbox.verygoodproxy.com/pii/store`), which tokenizes PII fields via the inbound route before forwarding to the backend. The VGS Collect JS script is loaded with an SRI integrity hash for supply-chain security.
+
+See [VGS PII Integration](11-vgs-pii-integration.md) for the full architecture.
 
 ## Configuration
 

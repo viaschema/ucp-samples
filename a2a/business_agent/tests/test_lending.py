@@ -16,9 +16,14 @@
 
 from __future__ import annotations
 
+import json
+import re
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
+
+from business_agent.lender_api import _generate_mock_offers
 
 from business_agent.constants import (
     UCP_LENDING_EXTENSION,
@@ -91,8 +96,8 @@ def sample_pii_instrument(pii_provider_with_user):
     token = pii_provider_with_user.issue_token("alice@example.com")
     return PIIInstrument(
         id="pii_profile_1",
-        handler_id="example_pii_provider",
-        handler_name="example.pii.provider",
+        handler_id="vgs_pii_provider",
+        handler_name="vgs.pii.provider",
         fields_stored=list(
             pii_provider_with_user.get_stored_fields("alice@example.com")
         ),
@@ -101,9 +106,32 @@ def sample_pii_instrument(pii_provider_with_user):
     )
 
 
+def _mock_lender_transport(request: httpx.Request) -> httpx.Response:
+    """In-process mock transport that handles lender API calls without HTTP."""
+    match = re.search(r"/lender-api/([^/]+)/apply", str(request.url))
+    if not match:
+        return httpx.Response(404)
+    lender_id = match.group(1)
+    body = json.loads(request.content)
+    loan_type = body.get("loan_type", "personal")
+    loan_amount = float(body.get("loan_amount_requested", body.get("car_value", 10000)))
+    offers = _generate_mock_offers(
+        lender_id, loan_amount, loan_type, body.get("lender_name")
+    )
+    return httpx.Response(
+        200,
+        json={"offers": [o.model_dump(mode="json") for o in offers]},
+    )
+
+
 @pytest.fixture
-def loan_registry(pii_provider):
-    """Create a LoanProviderRegistry backed by the test pii_provider."""
+def loan_registry(pii_provider, monkeypatch):
+    """Create a LoanProviderRegistry backed by the test pii_provider.
+
+    Patches httpx.post to use a mock transport so tests don't need a running server.
+    """
+    mock_client = httpx.Client(transport=httpx.MockTransport(_mock_lender_transport))
+    monkeypatch.setattr(httpx, "post", mock_client.post)
     return LoanProviderRegistry(pii_provider)
 
 
@@ -511,8 +539,8 @@ class TestResolveToken:
         token = pii_provider.issue_token("foo@example.com", "sofi")
         instrument = PIIInstrument(
             id="test",
-            handler_id="example_pii_provider",
-            handler_name="example.pii.provider",
+            handler_id="vgs_pii_provider",
+            handler_name="vgs.pii.provider",
             credential=PIICredential(type="token", token=token),
             platform_id="sofi",
         )
@@ -607,8 +635,10 @@ class TestLoanProviderRegistry:
 
         assert len(loan_registry._providers) == len(LENDER_LIST)
 
-    def test_single_provider_generates_offers(self, pii_provider):
+    def test_single_provider_generates_offers(self, pii_provider, monkeypatch):
         """Test that a single MockLoanProvider generates offers correctly."""
+        mock_client = httpx.Client(transport=httpx.MockTransport(_mock_lender_transport))
+        monkeypatch.setattr(httpx, "post", mock_client.post)
         lender = Lender(
             lender_name="TestBank",
             loan_types_offered=["personal"],
@@ -711,8 +741,8 @@ class TestPIICollectionFlow:
         # Step 5: Validate the token
         instrument = PIIInstrument(
             id="test_profile",
-            handler_id="example_pii_provider",
-            handler_name="example.pii.provider",
+            handler_id="vgs_pii_provider",
+            handler_name="vgs.pii.provider",
             fields_stored=list(pii_data.keys()),
             loan_type="personal",
             credential=PIICredential(type="token", token=token),
@@ -755,6 +785,75 @@ class TestPIICollectionFlow:
         )
         missing = pii_provider.get_missing_fields(email, PERSONAL_LOAN_PII_FIELDS)
         assert missing == []
+
+
+    def test_incremental_collection_across_loan_types(self, pii_provider):
+        """Test that switching from personal to car loan only requires the delta fields.
+
+        Personal loan needs 8 fields. Car loan needs those 8 + 4 more.
+        After storing personal loan PII, starting a car loan should report
+        only the 4 additional fields as missing.
+        """
+        email = "crossloan@example.com"
+
+        # Store all personal loan PII
+        pii_provider.store_pii(
+            email,
+            {
+                "first_name": "Cross",
+                "last_name": "Loan",
+                "email": email,
+                "phone_number": "+15559990000",
+                "address": {
+                    "street_address": "300 Cross St",
+                    "address_locality": "Loanville",
+                    "address_region": "CA",
+                    "postal_code": "90002",
+                    "address_country": "US",
+                },
+                "date_of_birth": "1988-06-15",
+                "annual_income": "95000",
+                "living_situation": "mortgage",
+            },
+        )
+
+        # Personal loan: all fields present
+        missing_personal = pii_provider.get_missing_fields(
+            email, PERSONAL_LOAN_PII_FIELDS
+        )
+        assert missing_personal == []
+
+        # Car loan: only the 4 additional fields should be missing
+        missing_car = pii_provider.get_missing_fields(email, CAR_LOAN_PII_FIELDS)
+        assert sorted(missing_car) == sorted([
+            "monthly_housing_payment",
+            "employment_status",
+            "employer_address",
+            "employer_phone_number",
+        ])
+
+        # Store the car-specific fields
+        pii_provider.store_pii(
+            email,
+            {
+                "monthly_housing_payment": "2800",
+                "employment_status": "employed",
+                "employer_address": {
+                    "street_address": "500 Work Ave",
+                    "address_locality": "Worktown",
+                    "address_region": "CA",
+                    "postal_code": "90003",
+                    "address_country": "US",
+                },
+                "employer_phone_number": "+15558887777",
+            },
+        )
+
+        # Now car loan should have all fields
+        missing_car_after = pii_provider.get_missing_fields(
+            email, CAR_LOAN_PII_FIELDS
+        )
+        assert missing_car_after == []
 
 
 # ---------- Test Capability Negotiation ----------
@@ -930,7 +1029,7 @@ class TestPIIVaultEndpoints:
         """Helper to build a valid PIIConsent payload."""
         defaults = {
             "pii_method_id": "pii_profile_1",
-            "handler_id": "example_pii_provider",
+            "handler_id": "vgs_pii_provider",
             "fields_consented": ["first_name"],
             "loan_type": "personal",
             "platform_ids": ["sofi"],
@@ -965,8 +1064,8 @@ class TestPIIVaultEndpoints:
 
         for inst in instruments:
             assert inst["id"] == "pii_profile_1"
-            assert inst["handler_id"] == "example_pii_provider"
-            assert inst["handler_name"] == "example.pii.provider"
+            assert inst["handler_id"] == "vgs_pii_provider"
+            assert inst["handler_name"] == "vgs_pii_provider"
             assert "first_name" in inst["fields_stored"]
             assert inst["loan_type"] == "personal"
             assert inst["credential"]["type"] == "token"

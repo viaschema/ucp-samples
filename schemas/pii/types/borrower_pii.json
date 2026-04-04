@@ -1,40 +1,36 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://viaschema.com/schemas/lending/types/borrower_pii.json",
-  "title": "Borrower PII",
-  "description": "Complete borrower PII model for lending applications. Composes UCP canonical Buyer fields (first_name, last_name, email, phone_number) with finance-specific fields. This schema defines what the PII vault stores — the agent never receives this data directly.",
+  "$id": "https://viaschema.com/schemas/pii/types/borrower_pii.json",
+  "title": "BorrowerPII",
+  "description": "Complete borrower PII model for lending applications. Composes UCP canonical Buyer fields with finance-specific fields.",
   "type": "object",
   "additionalProperties": true,
   "properties": {
     "first_name": {
       "type": "string",
-      "description": "Borrower first name."
+      "description": "Borrower's first name."
     },
     "last_name": {
       "type": "string",
-      "description": "Borrower last name."
-    },
-    "full_name": {
-      "type": "string",
-      "description": "Borrower full display name."
+      "description": "Borrower's last name."
     },
     "email": {
       "type": "string",
       "format": "email",
-      "description": "Borrower email address."
+      "description": "Borrower's email address."
     },
     "phone_number": {
       "type": "string",
-      "description": "Borrower phone number (E.164 format)."
+      "description": "Borrower's phone number (E.164 format)."
     },
     "address": {
       "$ref": "https://ucp.dev/schemas/shopping/types/postal_address.json",
-      "description": "Borrower postal address."
+      "description": "Borrower's postal address."
     },
     "date_of_birth": {
       "type": "string",
       "format": "date",
-      "description": "Date of birth (ISO 8601, e.g. 1990-01-15)."
+      "description": "Date of birth (ISO 8601, e.g., 1990-01-15)."
     },
     "annual_income": {
       "type": "string",
@@ -42,8 +38,8 @@
     },
     "living_situation": {
       "type": "string",
-      "description": "Housing status.",
-      "enum": ["rent", "fully_own", "mortgage"]
+      "enum": ["rent", "fully_own", "mortgage"],
+      "description": "Housing status."
     },
     "monthly_housing_payment": {
       "type": "string",
@@ -51,8 +47,8 @@
     },
     "employment_status": {
       "type": "string",
-      "description": "Employment status.",
-      "enum": ["employed", "self_employed", "unemployed", "retired"]
+      "enum": ["employed", "self_employed", "unemployed", "retired"],
+      "description": "Employment status."
     },
     "employer_phone_number": {
       "type": "string",
@@ -60,7 +56,7 @@
     },
     "employer_address": {
       "$ref": "https://ucp.dev/schemas/shopping/types/postal_address.json",
-      "description": "Employer postal address."
+      "description": "Employer's postal address."
     }
   }
 }
