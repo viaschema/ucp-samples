@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import {apiFetch} from '../lib/apiClient';
 import type {Lender, PIIConsent, PIIInstrument, PIIMethod} from '../types';
 
 /**
@@ -45,7 +46,7 @@ export class PIIProviderProxy {
       config,
     );
 
-    const response = await fetch('/api/pii/stored-fields', {
+    const response = await apiFetch('/pii/stored-fields', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({email: user_email}),
@@ -76,7 +77,7 @@ export class PIIProviderProxy {
         `fields: ${consent.fields_consented.join(', ')}`,
     );
 
-    const response = await fetch('/api/pii/consent', {
+    const response = await apiFetch('/pii/consent', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({email: user_email, consent}),
@@ -97,7 +98,7 @@ export class PIIProviderProxy {
     loan_type?: string,
   ): Promise<{lenders: Lender[]}> {
     const params = loan_type ? `?loan_type=${loan_type}` : '';
-    const response = await fetch(`/api/lending/lenders${params}`);
+    const response = await apiFetch(`/lending/lenders${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get lenders: ${response.status}`);
@@ -111,7 +112,7 @@ export class PIIProviderProxy {
    * The vault ID and environment are server-side secrets, not in ucp.json.
    */
   async getCollectConfig(): Promise<{vgs_vault_id: string; vgs_environment: string}> {
-    const response = await fetch('/api/lending/collect-config');
+    const response = await apiFetch('/lending/collect-config');
 
     if (!response.ok) {
       throw new Error(`Failed to get collect config: ${response.status}`);

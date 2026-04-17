@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: business-agent
+    runtime: python
+    region: oregon
+    plan: starter
+    pythonVersion: "3.13"
+    rootDir: samples/a2a/business_agent
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: uv run business_agent --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: API_SECRET_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: VGS_VAULT_ID
+        sync: false
+      - key: VGS_USERNAME
+        sync: false
+      - key: VGS_PASSWORD
+        sync: false
+      - key: VGS_ENVIRONMENT
+        value: sandbox
+      - key: LENDER_API_BASE
+        sync: false

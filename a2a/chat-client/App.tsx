@@ -18,6 +18,7 @@ import ChatInput from './components/ChatInput';
 import ChatMessageComponent from './components/ChatMessage';
 import Header from './components/Header';
 import {appConfig} from './config';
+import {apiFetch} from './lib/apiClient';
 import {CredentialProviderProxy} from './mocks/credentialProviderProxy';
 import {PIIProviderProxy} from './mocks/piiProviderProxy';
 
@@ -571,7 +572,7 @@ function App() {
           'profile="http://localhost:3000/profile/agent_profile.json"',
       };
 
-      const response = await fetch('/api', {
+      const response = await apiFetch('/', {
         method: 'POST',
         headers: {...defaultHeaders, ...options?.headers},
         body: JSON.stringify({

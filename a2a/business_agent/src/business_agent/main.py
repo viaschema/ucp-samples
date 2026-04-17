@@ -44,6 +44,7 @@ import uvicorn
 
 from .agent import root_agent as business_agent
 from .agent_executor import ADKAgentExecutor
+from .auth_middleware import APIKeyMiddleware
 from .dependencies import create_lending_dependencies
 from .lender_api import create_lender_api_routes
 from .lending_tools import init_lending
@@ -167,15 +168,25 @@ async def run(host, port):
     cors_origins = [
         f"https://{vgs_vault_id}.sandbox.verygoodproxy.com",
         f"https://{vgs_vault_id}.live.verygoodproxy.com",
-        "http://localhost:5173",  # Vite dev server
+        "http://localhost:3000",  # Vite dev server
+        "http://localhost:5173",  # Vite default port
     ]
+    frontend_origin = os.getenv("FRONTEND_ORIGIN")
+    if frontend_origin:
+        cors_origins.extend(
+            o.strip() for o in frontend_origin.split(",") if o.strip()
+        )
+    # CORSMiddleware must wrap the auth middleware so preflights and 401
+    # responses still carry CORS headers. Starlette applies middleware in
+    # the order listed (outermost first).
     middleware = [
         Middleware(
             CORSMiddleware,
             allow_origins=cors_origins,
             allow_methods=["GET", "POST", "OPTIONS"],
-            allow_headers=["Content-Type"],
+            allow_headers=["Content-Type", "Authorization"],
         ),
+        Middleware(APIKeyMiddleware),
     ]
     app = Starlette(routes=routes, middleware=middleware)
 
