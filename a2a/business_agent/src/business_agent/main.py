@@ -184,7 +184,12 @@ async def run(host, port):
             CORSMiddleware,
             allow_origins=cors_origins,
             allow_methods=["GET", "POST", "OPTIONS"],
-            allow_headers=["Content-Type", "Authorization"],
+            allow_headers=[
+                "Content-Type",
+                "Authorization",
+                "X-A2A-Extensions",
+                "UCP-Agent",
+            ],
         ),
         Middleware(APIKeyMiddleware),
     ]

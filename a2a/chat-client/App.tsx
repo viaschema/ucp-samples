@@ -568,8 +568,7 @@ function App() {
         'Content-Type': 'application/json',
         'X-A2A-Extensions':
           'https://ucp.dev/specification/reference?v=2026-01-11',
-        'UCP-Agent':
-          'profile="http://localhost:3000/profile/agent_profile.json"',
+        'UCP-Agent': `profile="${window.location.origin}/profile/agent_profile.json"`,
       };
 
       const response = await apiFetch('/', {
