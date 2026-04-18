@@ -29,7 +29,7 @@ from starlette.types import ASGIApp
 
 logger = logging.getLogger(__name__)
 
-PUBLIC_PREFIXES: tuple[str, ...] = ("/.well-known/", "/images")
+PUBLIC_PREFIXES: tuple[str, ...] = ("/.well-known/", "/images", "/lender-api/")
 BEARER_PREFIX = "Bearer "
 
 
