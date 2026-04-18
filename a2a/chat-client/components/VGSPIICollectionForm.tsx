@@ -6,23 +6,19 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 
 /**
  * VGS Collect JS-based PII collection form.
  *
- * All fields render inside VGS Collect iframes — including dropdowns,
- * date pickers, and zip-code fields — so PII never touches browser JS.
+ * Every field renders inside a VGS-controlled cross-origin iframe.
+ * Values are tokenized at VGS before reaching our backend — the agent/LLM
+ * only ever receives an opaque token reference.
  */
 
 import type React from 'react';
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
+import VaultFlowDiagram from './VaultFlowDiagram';
 
 declare global {
   interface Window {
@@ -40,29 +36,34 @@ interface VGSPIICollectionFormProps {
 }
 
 // ---------------------------------------------------------------------------
-// Styling
+// Styling — VGS iframe fields
 // ---------------------------------------------------------------------------
 
 const VGS_FIELD_CSS = {
-  'font-family': 'system-ui, -apple-system, sans-serif',
-  'font-size': '0.875rem',
+  'font-family':
+    "'Instrument Sans', system-ui, -apple-system, sans-serif",
+  'font-size': '0.95rem',
   'line-height': '1.25rem',
-  color: '#111827',
-  padding: '0.5rem 0.75rem',
+  color: '#15141A',
+  padding: '0.62rem 0.85rem',
   width: '100%',
   height: '100%',
   'box-sizing': 'border-box',
-  border: '1px solid #d1d5db',
-  'border-radius': '0.375rem',
+  background: '#F3EEDF',
+  border: '1px solid rgba(21,20,26,0.14)',
+  'border-radius': '8px',
   '&:focus': {
     outline: 'none',
-    'border-color': '#3b82f6',
-    'box-shadow': '0 0 0 1px #3b82f6',
+    'border-color': '#A44626',
+    'box-shadow': '0 0 0 3px rgba(164,70,38,0.22)',
+  },
+  '&::placeholder': {
+    color: '#8B858A',
   },
 };
 
 // ---------------------------------------------------------------------------
-// Reference data for dropdowns
+// Reference data
 // ---------------------------------------------------------------------------
 
 const US_STATES = [
@@ -109,19 +110,19 @@ const COUNTRIES = [
 
 const LIVING_SITUATION_OPTIONS = [
   {value: 'rent', text: 'Rent'},
-  {value: 'fully_own', text: 'Fully Own'},
+  {value: 'fully_own', text: 'Fully own'},
   {value: 'mortgage', text: 'Mortgage'},
 ];
 
 const EMPLOYMENT_STATUS_OPTIONS = [
   {value: 'employed', text: 'Employed'},
-  {value: 'self_employed', text: 'Self Employed'},
+  {value: 'self_employed', text: 'Self-employed'},
   {value: 'unemployed', text: 'Unemployed'},
   {value: 'retired', text: 'Retired'},
 ];
 
 // ---------------------------------------------------------------------------
-// Field configuration — all fields are VGS Collect iframes
+// Field configuration
 // ---------------------------------------------------------------------------
 
 interface VGSFieldConfig {
@@ -131,32 +132,46 @@ interface VGSFieldConfig {
   options?: {value: string; text: string}[];
   defaultValue?: string;
   min?: string;
+  sensitive?: boolean; // shows a lock glyph indicating particularly sensitive
+  hint?: string;
 }
 
 const FIELD_CONFIG: Record<string, VGSFieldConfig> = {
-  first_name: {label: 'First Name', vgsType: 'text', placeholder: 'John'},
-  last_name: {label: 'Last Name', vgsType: 'text', placeholder: 'Doe'},
-  email: {label: 'Email', vgsType: 'text', placeholder: 'john@example.com'},
-  phone_number: {label: 'Phone Number', vgsType: 'text', placeholder: '+1 555 123 4567'},
-  date_of_birth: {label: 'Date of Birth', vgsType: 'date', min: '1920-01-01'},
-  annual_income: {label: 'Annual Income ($)', vgsType: 'text', placeholder: '75000'},
+  first_name: {label: 'First name', vgsType: 'text', placeholder: 'Jamie'},
+  last_name: {label: 'Last name', vgsType: 'text', placeholder: 'Rivera'},
+  email: {label: 'Email', vgsType: 'text', placeholder: 'jamie@example.com'},
+  phone_number: {label: 'Phone', vgsType: 'text', placeholder: '+1 555 123 4567'},
+  date_of_birth: {
+    label: 'Date of birth',
+    vgsType: 'date',
+    min: '1920-01-01',
+    sensitive: true,
+  },
+  annual_income: {
+    label: 'Annual income',
+    vgsType: 'text',
+    placeholder: '75000',
+    sensitive: true,
+    hint: 'Pre-tax, USD',
+  },
   living_situation: {
-    label: 'Living Situation',
+    label: 'Living situation',
     vgsType: 'dropdown',
     options: LIVING_SITUATION_OPTIONS,
   },
   monthly_housing_payment: {
-    label: 'Monthly Housing Payment ($)',
+    label: 'Monthly housing payment',
     vgsType: 'text',
     placeholder: '2000',
+    hint: 'Rent or mortgage',
   },
   employment_status: {
-    label: 'Employment Status',
+    label: 'Employment status',
     vgsType: 'dropdown',
     options: EMPLOYMENT_STATUS_OPTIONS,
   },
   employer_phone_number: {
-    label: 'Employer Phone Number',
+    label: 'Employer phone',
     vgsType: 'text',
     placeholder: '+1 555 567 8901',
   },
@@ -172,10 +187,10 @@ interface AddressSubfield {
 }
 
 const ADDRESS_SUBFIELDS: AddressSubfield[] = [
-  {key: 'street_address', label: 'Street Address', vgsType: 'text', placeholder: '123 Main St'},
+  {key: 'street_address', label: 'Street address', vgsType: 'text', placeholder: '123 Main St'},
   {key: 'address_locality', label: 'City', vgsType: 'text', placeholder: 'San Francisco'},
   {key: 'address_region', label: 'State', vgsType: 'dropdown', options: US_STATES},
-  {key: 'postal_code', label: 'ZIP Code', vgsType: 'zip-code', placeholder: '94102'},
+  {key: 'postal_code', label: 'ZIP', vgsType: 'zip-code', placeholder: '94102'},
   {key: 'address_country', label: 'Country', vgsType: 'dropdown', options: COUNTRIES, defaultValue: 'US'},
 ];
 
@@ -205,8 +220,6 @@ function getVGSFieldNames(missingFields: string[]): string[] {
   return names;
 }
 
-/** Build VGS field options from a VGSFieldConfig or AddressSubfield. */
-// biome-ignore lint/suspicious/noExplicitAny: VGS field config object
 function buildVGSFieldConfig(cfg: {
   vgsType: string;
   placeholder?: string;
@@ -228,22 +241,29 @@ function buildVGSFieldConfig(cfg: {
   if (cfg.options) opts.options = cfg.options;
   if (cfg.defaultValue) opts.defaultValue = cfg.defaultValue;
 
-  // Date fields
   if (cfg.vgsType === 'date' && cfg.min) {
     opts.min = cfg.min;
     opts.validations = [
       'required',
       {
         type: 'compareDate',
-        params: {
-          field: new Date(cfg.min),
-          function: 'more',
-        },
+        params: {field: new Date(cfg.min), function: 'more'},
       },
     ];
   }
 
   return opts;
+}
+
+// Fake, UI-only illustrative token — regenerated per mount so it feels alive.
+function makeIllustrativeToken() {
+  const chars = 'abcdef0123456789';
+  let body = '';
+  for (let i = 0; i < 18; i++) {
+    body += chars[Math.floor(Math.random() * chars.length)];
+    if (i === 3 || i === 9) body += '-';
+  }
+  return `pii_token_${body}…`;
 }
 
 // ---------------------------------------------------------------------------
@@ -263,7 +283,6 @@ export default function VGSPIICollectionForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // All fields are now VGS-managed — separate by type for rendering.
   const addressFields = missingFields.filter(
     (f) => f === 'address' || f === 'employer_address',
   );
@@ -272,6 +291,7 @@ export default function VGSPIICollectionForm({
   );
 
   const vgsFieldNames = getVGSFieldNames(missingFields);
+  const illustrativeToken = useMemo(makeIllustrativeToken, []);
 
   useEffect(() => {
     if (formRef.current) {
@@ -280,38 +300,37 @@ export default function VGSPIICollectionForm({
     }
 
     if (!window.VGSCollect) {
-      setError('VGS Collect JS not loaded. Check index.html.');
+      setError('VGS Collect JS could not load. Check your connection, then retry.');
       return;
     }
 
     const form = window.VGSCollect.create(
       vaultId,
       environment,
-      () => { setIsReady(true); },
+      () => {
+        setIsReady(true);
+      },
     );
     formRef.current = form;
 
-    // Create VGS Collect fields for standard PII fields.
     for (const field of standardFields) {
       const config = FIELD_CONFIG[field];
       if (!config) continue;
-
-      form.field(`#vgs-${field}`, buildVGSFieldConfig({
-        ...config,
-        name: field,
-      }));
+      form.field(
+        `#vgs-${field}`,
+        buildVGSFieldConfig({...config, name: field}),
+      );
     }
 
-    // Create VGS Collect fields for address sub-fields.
     for (const addrField of addressFields) {
       for (const sub of ADDRESS_SUBFIELDS) {
-        form.field(`#vgs-${addrField}-${sub.key}`, buildVGSFieldConfig({
-          ...sub,
-          name: addrFlatKey(addrField, sub.key),
-        }));
+        form.field(
+          `#vgs-${addrField}-${sub.key}`,
+          buildVGSFieldConfig({...sub, name: addrFlatKey(addrField, sub.key)}),
+        );
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // biome-ignore lint/correctness/useExhaustiveDependencies: initialize once per vault
   }, [vaultId, environment]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -328,34 +347,37 @@ export default function VGSPIICollectionForm({
         // biome-ignore lint/suspicious/noExplicitAny: VGS formValues type
         data: (formValues: Record<string, any>) => {
           const piiData: Record<string, unknown> = {};
-
           for (const name of vgsFieldNames) {
             piiData[name] = formValues[name] ?? {__type: 'vgs-key', key: name};
           }
-
-          const emailMarker = formValues['email'] ?? {__type: 'vgs-key', key: 'email'};
-
-          return {
-            email: emailMarker,
-            pii_data: piiData,
-          };
+          const emailMarker =
+            formValues['email'] ?? {__type: 'vgs-key', key: 'email'};
+          return {email: emailMarker, pii_data: piiData};
         },
       },
       // biome-ignore lint/suspicious/noExplicitAny: VGS callback types
       (status: number, response: any) => {
         setIsSubmitting(false);
         if (status >= 200 && status < 300) {
-          const result = typeof response === 'string' ? JSON.parse(response) : response;
-          onSubmit({fields_stored: result.fields_stored || missingFields, email: result.email});
+          const result =
+            typeof response === 'string' ? JSON.parse(response) : response;
+          onSubmit({
+            fields_stored: result.fields_stored || missingFields,
+            email: result.email,
+          });
         } else {
-          setError(`Submission failed (${status}). Please try again.`);
+          setError(
+            `We couldn't seal the submission (status ${status}). Please try again.`,
+          );
         }
       },
       // biome-ignore lint/suspicious/noExplicitAny: VGS callback types
       (errors: any) => {
         setIsSubmitting(false);
         console.error('VGS Collect submission error:', errors);
-        setError('Failed to submit securely. Please check your inputs.');
+        setError(
+          'Some fields need attention before we can seal them. Check the highlighted entries.',
+        );
       },
     );
   };
@@ -366,44 +388,67 @@ export default function VGSPIICollectionForm({
 
     return (
       <div key={field}>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          {label}
+        <label
+          htmlFor={`vgs-${field}`}
+          className="field-label flex items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5">
+            {label}
+            {config?.sensitive && (
+              <span
+                aria-label="Sensitive field"
+                title="Especially sensitive — encrypted end-to-end"
+                className="text-moss">
+                <svg viewBox="0 0 12 12" className="w-3 h-3" fill="currentColor">
+                  <path d="M6 1a3 3 0 00-3 3v2H2.5a.5.5 0 00-.5.5v4a.5.5 0 00.5.5h7a.5.5 0 00.5-.5v-4a.5.5 0 00-.5-.5H9V4a3 3 0 00-3-3zm-2 3a2 2 0 114 0v2H4V4z" />
+                </svg>
+              </span>
+            )}
+          </span>
+          {config?.hint && (
+            <span className="text-[0.72rem] text-ink-soft font-normal">
+              {config.hint}
+            </span>
+          )}
         </label>
         <div
           id={`vgs-${field}`}
           className="w-full"
-          style={{height: '40px'}}
+          style={{height: '44px'}}
         />
       </div>
     );
   };
 
   const renderAddressFields = (addrField: string) => {
-    const label = addrField === 'employer_address' ? 'Employer Address' : 'Address';
+    const label = addrField === 'employer_address' ? 'Employer address' : 'Address';
 
     return (
       <fieldset key={addrField} className="space-y-2">
-        <legend className="block text-sm font-medium text-gray-700 mb-1">
-          {label}
-        </legend>
-        {ADDRESS_SUBFIELDS.map((sub) => (
-          <div key={`${addrField}-${sub.key}`}>
-            <label className="block text-xs text-gray-500 mb-0.5">
-              {sub.label}
-            </label>
+        <legend className="field-label mb-1">{label}</legend>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {ADDRESS_SUBFIELDS.map((sub) => (
             <div
-              id={`vgs-${addrField}-${sub.key}`}
-              className="w-full"
-              style={{height: '40px'}}
-            />
-          </div>
-        ))}
+              key={`${addrField}-${sub.key}`}
+              className={sub.key === 'street_address' ? 'sm:col-span-2' : ''}>
+              <label
+                htmlFor={`vgs-${addrField}-${sub.key}`}
+                className="block text-[0.72rem] text-ink-soft mb-0.5">
+                {sub.label}
+              </label>
+              <div
+                id={`vgs-${addrField}-${sub.key}`}
+                className="w-full"
+                style={{height: '44px'}}
+              />
+            </div>
+          ))}
+        </div>
       </fieldset>
     );
   };
 
   return (
-    <div className="w-full my-2 border border-amber-200 rounded-lg p-4 bg-amber-50">
+    <div className="w-full my-3 surface p-5 md:p-6 reveal">
       <style>{`
         [id^="vgs-"] iframe {
           width: 100% !important;
@@ -411,40 +456,110 @@ export default function VGSPIICollectionForm({
           border: none;
         }
       `}</style>
-      <h3 className="font-semibold text-lg text-gray-900 mb-1">
-        Additional Information Required
-      </h3>
-      <p className="text-sm text-gray-600 mb-1">
-        We need some additional information to process your loan application.
-        Your data is collected securely via VGS and never stored on our servers.
-      </p>
-      <div className="flex items-center gap-1 mb-3">
-        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
-        </svg>
-        <span className="text-xs text-green-700">Secured by VGS</span>
+
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="caps text-copper mb-1.5">Secure application details</div>
+          <h3 className="display text-[1.55rem] md:text-[1.85rem] leading-[1.1] text-ink mb-2">
+            The AI never sees what you type below.
+          </h3>
+          <p className="text-[0.94rem] text-ink-muted leading-snug max-w-[52ch]">
+            Each field is a sealed VGS iframe. Values are tokenized before they
+            reach our servers and only decrypted when routed to a lender you
+            explicitly authorize. The assistant — and the model behind it —
+            only ever receives an opaque token.
+          </p>
+        </div>
+        <div
+          className="flex-shrink-0 flex flex-col items-center gap-1 text-moss"
+          aria-label="Encrypted">
+          <svg viewBox="0 0 24 24" fill="none" className="w-7 h-7">
+            <rect x="4" y="9" width="16" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+            <path
+              d="M8 9V7a4 4 0 118 0v2"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+          <span className="caps text-[0.62rem]">Sealed</span>
+        </div>
       </div>
 
+      {/* Vault flow diagram */}
+      <VaultFlowDiagram />
+
+      {/* What the AI receives */}
+      <div className="surface-quiet px-4 py-3 mb-5 flex items-center gap-3 flex-wrap">
+        <div className="caps text-ink-muted flex-shrink-0">What the AI receives</div>
+        <code className="mono text-[0.82rem] text-ink bg-paper-deep border border-[var(--rule)] rounded px-2 py-1 tnum">
+          {illustrativeToken}
+        </code>
+        <span className="text-[0.78rem] text-ink-soft">
+          An opaque reference — not your data.
+        </span>
+      </div>
+
+      {/* Error */}
       {error && (
-        <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+        <div
+          role="alert"
+          aria-live="polite"
+          className="mb-4 px-3 py-2.5 rounded-md border border-[var(--oxblood)] bg-[color-mix(in_srgb,var(--oxblood)_8%,var(--paper))] text-[0.88rem] text-[var(--oxblood)]">
           {error}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-3">
+      {/* Fields */}
+      <form onSubmit={handleSubmit} className="space-y-3.5">
         {standardFields.map(renderVGSField)}
         {addressFields.map(renderAddressFields)}
 
-        <button
-          type="submit"
-          disabled={!isReady || isSubmitting}
-          className={`w-full px-4 py-2 rounded-lg font-medium transition-colors ${
-            isReady && !isSubmitting
-              ? 'bg-blue-600 text-white hover:bg-blue-700'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-          }`}>
-          {isSubmitting ? 'Submitting securely...' : 'Submit Information'}
-        </button>
+        <hr className="hairline my-4" />
+
+        <p className="text-[0.78rem] text-ink-muted leading-snug">
+          Tenor uses <span className="mono">VGS</span> for tokenization. Your
+          SSN, birthdate, income, and address stay encrypted end-to-end. The AI
+          model never receives them — not during this conversation, not in
+          logs, not in training data.
+          {userEmail ? (
+            <>
+              {' '}You'll be recognized as{' '}
+              <span className="mono text-ink">{userEmail}</span>.
+            </>
+          ) : null}
+        </p>
+
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="submit"
+            disabled={!isReady || isSubmitting}
+            className={`btn btn-seal flex-1 ${isSubmitting ? 'sealing' : ''}`}
+            aria-describedby="vgs-submit-note">
+            {isSubmitting ? (
+              <>
+                <svg viewBox="0 0 20 20" className="w-4 h-4" fill="none" aria-hidden>
+                  <circle cx="10" cy="10" r="7" stroke="currentColor" strokeOpacity="0.35" strokeWidth="2" />
+                  <path d="M10 3a7 7 0 017 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                Sealing…
+              </>
+            ) : (
+              <>
+                <svg viewBox="0 0 20 20" className="w-4 h-4" fill="none" aria-hidden>
+                  <rect x="4" y="8" width="12" height="9" rx="1.25" stroke="currentColor" strokeWidth="1.6" />
+                  <path d="M7 8V6a3 3 0 116 0v2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+                Store securely
+              </>
+            )}
+          </button>
+        </div>
+        <p id="vgs-submit-note" className="text-[0.72rem] text-ink-soft">
+          Submitting stores tokens only. You'll pick which lenders receive which
+          fields on the next step.
+        </p>
       </form>
     </div>
   );

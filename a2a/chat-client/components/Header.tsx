@@ -6,27 +6,142 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
+import {useEffect, useState} from 'react';
 import {appConfig} from '@/config';
 
-function Header() {
+function LockMark() {
   return (
-    <header className="bg-white shadow-sm p-4 border-b border-gray-200 flex-shrink-0">
-      <h1 className="text-xl font-bold text-gray-800 text-center flex justify-center items-center">
-        <img
-          src={appConfig.logoUrl}
-          alt={appConfig.name}
-          className="h-8 mr-3"
-        />
-        <span>{appConfig.titleText}</span>
-      </h1>
-    </header>
+    <svg
+      viewBox="0 0 32 32"
+      className="w-8 h-8 text-ink"
+      fill="none"
+      aria-hidden>
+      <circle cx="16" cy="16" r="15" stroke="currentColor" strokeWidth="1.25" />
+      <path
+        d="M11 15.5v-2a5 5 0 1110 0v2"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+      />
+      <rect
+        x="10"
+        y="15.5"
+        width="12"
+        height="8.5"
+        rx="1.25"
+        stroke="currentColor"
+        strokeWidth="1.25"
+      />
+      <circle cx="16" cy="19.5" r="1.15" fill="currentColor" />
+      <path
+        d="M16 20.5v1.6"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function PrivacyExplainerModal({onClose}: {onClose: () => void}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="privacy-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[rgba(21,20,26,0.38)]"
+      onClick={onClose}>
+      <div
+        className="surface max-w-xl w-full p-6 md:p-8 reveal"
+        onClick={(e) => e.stopPropagation()}>
+        <div className="caps text-copper mb-2">How Tenor handles your data</div>
+        <h2
+          id="privacy-modal-title"
+          className="display text-[1.7rem] md:text-[2rem] text-ink leading-[1.1] mb-4">
+          Three separate systems. One conversation.
+        </h2>
+
+        <ol className="space-y-4 text-[0.94rem] text-ink leading-snug">
+          <li>
+            <span className="caps text-moss block mb-0.5">1 · Vault</span>
+            Your PII is typed into VGS-controlled iframes. Values are tokenized at
+            the VGS edge before they ever reach our backend. We store tokens; we
+            never store the underlying SSN, date of birth, income, or address.
+          </li>
+          <li>
+            <span className="caps text-moss block mb-0.5">2 · Assistant</span>
+            The AI model (Gemini) only sees opaque references like{' '}
+            <code className="mono text-[0.88em]">pii_token_7f3a…</code>. Not your
+            name. Not your income. Not in the prompt, not in logs, not in
+            training.
+          </li>
+          <li>
+            <span className="caps text-moss block mb-0.5">3 · Lender</span>
+            When you authorize a specific lender, VGS decrypts in-flight on that
+            one outbound request. Other lenders and other parts of our system
+            never see the raw values.
+          </li>
+        </ol>
+
+        <hr className="hairline my-5" />
+
+        <p className="text-[0.82rem] text-ink-muted">
+          This is a demo of the UCP lending protocol with VGS as the PII
+          provider. Source: <span className="mono">samples/a2a/docs/12-pii-collection-overview.md</span>.
+        </p>
+
+        <div className="mt-6 flex justify-end">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Header() {
+  const [showPrivacy, setShowPrivacy] = useState(false);
+
+  return (
+    <>
+      <header className="bg-paper border-b border-[var(--rule)] flex-shrink-0">
+        <div className="max-w-offers mx-auto px-4 md:px-6 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <LockMark />
+            <div className="flex flex-col leading-none">
+              <span className="display text-[1.75rem] text-ink">
+                {appConfig.titleText}
+              </span>
+              <span className="caps text-ink-muted mt-1">
+                {appConfig.tagline}
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowPrivacy(true)}
+            className="btn btn-ghost min-h-[40px] py-0 text-sm"
+            aria-haspopup="dialog">
+            <svg viewBox="0 0 20 20" className="w-4 h-4" fill="currentColor" aria-hidden>
+              <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm.75 11.5a.75.75 0 11-1.5 0V9a.75.75 0 011.5 0v4.5zM10 7.25a.9.9 0 110-1.8.9.9 0 010 1.8z" />
+            </svg>
+            How your data is handled
+          </button>
+        </div>
+      </header>
+      {showPrivacy && <PrivacyExplainerModal onClose={() => setShowPrivacy(false)} />}
+    </>
   );
 }
 

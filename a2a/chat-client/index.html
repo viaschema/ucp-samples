@@ -19,25 +19,69 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Agent</title>
+    <meta name="theme-color" content="#F3EEDF" />
+    <title>Tenor · a privacy-first lending assistant</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..800,0..100&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <script>
+      // Configure Tailwind before the CDN script loads.
+      window.tailwind = window.tailwind || {};
+      window.tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              paper: '#F3EEDF',
+              'paper-deep': '#EBE4D0',
+              ink: '#15141A',
+              'ink-muted': '#4F4A4E',
+              'ink-soft': '#6C666A',
+              copper: '#A44626',
+              'copper-soft': '#C6623C',
+              moss: '#2E4A3C',
+              'moss-soft': '#4E6A5B',
+              oxblood: '#7A2A22',
+              rule: 'rgba(21,20,26,0.14)',
+              'rule-strong': 'rgba(21,20,26,0.28)',
+            },
+            fontFamily: {
+              display: ['Fraunces', 'Georgia', 'serif'],
+              sans: ['"Instrument Sans"', 'system-ui', 'sans-serif'],
+              mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
+            },
+            maxWidth: {
+              chat: '720px',
+              offers: '960px',
+            },
+          },
+        },
+      };
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://js.verygoodvault.com/vgs-collect/3.2.2/vgs-collect.js"
-            integrity="sha384-YXvleED0q049Gx5rqUHI/hOTud/jKaLiL757lVq26oVFAd9SjTDHBoOviWw6XmPo"
-            crossorigin="anonymous"></script>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.27.0"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
-  <body class="bg-gray-50 antialiased">
+    <script
+      src="https://js.verygoodvault.com/vgs-collect/3.2.2/vgs-collect.js"
+      integrity="sha384-YXvleED0q049Gx5rqUHI/hOTud/jKaLiL757lVq26oVFAd9SjTDHBoOviWw6XmPo"
+      crossorigin="anonymous"></script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://aistudiocdn.com/react@^19.2.0",
+          "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+          "react/": "https://aistudiocdn.com/react@^19.2.0/",
+          "@google/genai": "https://aistudiocdn.com/@google/genai@^1.27.0"
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="/index.css" />
+  </head>
+  <body class="bg-paper text-ink antialiased font-sans">
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>

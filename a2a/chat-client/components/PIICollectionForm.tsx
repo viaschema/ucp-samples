@@ -6,12 +6,6 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 import type React from 'react';
 import {useState} from 'react';
@@ -33,56 +27,57 @@ const FIELD_CONFIG: Record<
   string,
   {label: string; type: string; placeholder: string; options?: string[]}
 > = {
-  first_name: {label: 'First Name', type: 'text', placeholder: 'John'},
-  last_name: {label: 'Last Name', type: 'text', placeholder: 'Doe'},
-  email: {label: 'Email', type: 'email', placeholder: 'john@example.com'},
-  phone_number: {label: 'Phone Number', type: 'phone', placeholder: ''},
+  first_name: {label: 'First name', type: 'text', placeholder: 'Jamie'},
+  last_name: {label: 'Last name', type: 'text', placeholder: 'Rivera'},
+  email: {label: 'Email', type: 'email', placeholder: 'jamie@example.com'},
+  phone_number: {label: 'Phone number', type: 'phone', placeholder: ''},
   address: {label: 'Address', type: 'address', placeholder: ''},
-  date_of_birth: {label: 'Date of Birth', type: 'date', placeholder: ''},
+  date_of_birth: {label: 'Date of birth', type: 'date', placeholder: ''},
   annual_income: {
-    label: 'Annual Income ($)',
+    label: 'Annual income ($)',
     type: 'number',
     placeholder: '75000',
   },
   living_situation: {
-    label: 'Living Situation',
+    label: 'Living situation',
     type: 'select',
     placeholder: '',
     options: ['rent', 'fully_own', 'mortgage'],
   },
   monthly_housing_payment: {
-    label: 'Monthly Housing Payment ($)',
+    label: 'Monthly housing payment ($)',
     type: 'number',
     placeholder: '2000',
   },
   employment_status: {
-    label: 'Employment Status',
+    label: 'Employment status',
     type: 'select',
     placeholder: '',
     options: ['employed', 'self_employed', 'unemployed', 'retired'],
   },
   employer_address: {
-    label: 'Employer Address',
+    label: 'Employer address',
     type: 'address',
     placeholder: '',
   },
   employer_phone_number: {
-    label: 'Employer Phone Number',
+    label: 'Employer phone number',
     type: 'phone',
     placeholder: '',
   },
 };
 
 /**
- * Dynamic form for collecting missing PII fields.
- * Renders PhoneInput for phone fields, AddressInput for address fields,
- * selects for enum fields, and standard inputs for the rest.
+ * Non-VGS fallback PII form. Used only when VGS tokenization is unavailable
+ * (e.g. local dev without VGS credentials). Values flow through the backend
+ * as plaintext — clearly labeled as a fallback.
  */
 export default function PIICollectionForm({
   missingFields,
   onSubmit,
 }: PIICollectionFormProps) {
   const [formData, setFormData] = useState<Record<string, PIIFieldValue>>({});
+  const [submitting, setSubmitting] = useState(false);
 
   const handleChange = (field: string, value: PIIFieldValue) => {
     setFormData((prev) => ({...prev, [field]: value}));
@@ -90,6 +85,8 @@ export default function PIICollectionForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     onSubmit(formData);
   };
 
@@ -101,8 +98,6 @@ export default function PIICollectionForm({
       return isAddressComplete(val as PostalAddressData);
     }
     if (typeof val === 'string') {
-      // Phone values include the dial code prefix (e.g. "+1") even when
-      // empty. Require at least 4 chars for a meaningful phone entry.
       if (config?.type === 'phone') return val.length > 3;
       return val.trim() !== '';
     }
@@ -118,13 +113,35 @@ export default function PIICollectionForm({
       .join(' ');
 
   return (
-    <div className="w-full my-2 border border-amber-200 rounded-lg p-4 bg-amber-50">
-      <h3 className="font-semibold text-lg text-gray-900 mb-1">
-        Additional Information Required
+    <div className="w-full my-3 surface p-5 md:p-6 reveal">
+      <div
+        role="alert"
+        className="mb-4 px-3 py-2.5 rounded-md border border-[var(--oxblood)] bg-[color-mix(in_srgb,var(--oxblood)_8%,var(--paper))]">
+        <div className="flex items-start gap-2">
+          <svg
+            viewBox="0 0 20 20"
+            className="w-4 h-4 text-[var(--oxblood)] mt-0.5 flex-shrink-0"
+            fill="currentColor"
+            aria-hidden>
+            <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 5a.9.9 0 01.9.9v4a.9.9 0 01-1.8 0v-4A.9.9 0 0110 7zm0 9.2a1.1 1.1 0 110-2.2 1.1 1.1 0 010 2.2z" />
+          </svg>
+          <div>
+            <div className="caps text-[var(--oxblood)] mb-0.5">Fallback mode</div>
+            <p className="text-[0.85rem] text-ink leading-snug">
+              VGS tokenization is unavailable in this environment. Values below
+              will be sent to the backend directly — not as vault tokens.
+              Prefer the secure flow when available.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <h3 className="display text-[1.45rem] text-ink leading-[1.1] mb-2">
+        Application details
       </h3>
-      <p className="text-sm text-gray-600 mb-3">
+      <p className="text-[0.9rem] text-ink-muted mb-4 max-w-[52ch]">
         We need some additional information to process your loan application.
-        This data will be securely stored by your PII provider.
+        This data will be stored by your PII provider.
       </p>
       <form onSubmit={handleSubmit} className="space-y-3">
         {missingFields.map((field) => {
@@ -139,7 +156,7 @@ export default function PIICollectionForm({
               <div key={field}>
                 <label
                   htmlFor={`pii-${field}`}
-                  className="block text-sm font-medium text-gray-700 mb-1">
+                  className="field-label">
                   {config.label}
                 </label>
                 <PhoneInput
@@ -169,15 +186,15 @@ export default function PIICollectionForm({
               <div key={field}>
                 <label
                   htmlFor={`pii-${field}`}
-                  className="block text-sm font-medium text-gray-700 mb-1">
+                  className="field-label">
                   {config.label}
                 </label>
                 <select
                   id={`pii-${field}`}
                   value={(formData[field] as string) || ''}
                   onChange={(e) => handleChange(field, e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
-                  <option value="">Select...</option>
+                  className="field">
+                  <option value="">Select…</option>
                   {config.options.map((opt) => (
                     <option key={opt} value={opt}>
                       {formatFieldName(opt)}
@@ -190,9 +207,7 @@ export default function PIICollectionForm({
 
           return (
             <div key={field}>
-              <label
-                htmlFor={`pii-${field}`}
-                className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor={`pii-${field}`} className="field-label">
                 {config.label}
               </label>
               <input
@@ -201,20 +216,17 @@ export default function PIICollectionForm({
                 placeholder={config.placeholder}
                 value={(formData[field] as string) || ''}
                 onChange={(e) => handleChange(field, e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                disabled={submitting}
+                className="field"
               />
             </div>
           );
         })}
         <button
           type="submit"
-          disabled={!allFilled}
-          className={`w-full px-4 py-2 rounded-lg font-medium transition-colors ${
-            allFilled
-              ? 'bg-blue-600 text-white hover:bg-blue-700'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-          }`}>
-          Submit Information
+          disabled={!allFilled || submitting}
+          className="btn btn-primary w-full">
+          {submitting ? 'Submitting…' : 'Submit information'}
         </button>
       </form>
     </div>

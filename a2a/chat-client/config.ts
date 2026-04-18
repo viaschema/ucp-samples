@@ -19,6 +19,7 @@ export class AppProperties {
   logoUrl: string;
   defaultMessage: string;
   titleText: string;
+  tagline: string;
 
   constructor(
     name: string,
@@ -26,19 +27,22 @@ export class AppProperties {
     logoUrl: string,
     defaultMessage: string,
     titleText: string,
+    tagline: string,
   ) {
     this.name = name;
     this.description = description;
     this.logoUrl = logoUrl;
     this.defaultMessage = defaultMessage;
     this.titleText = titleText;
+    this.tagline = tagline;
   }
 }
 
 export const appConfig = new AppProperties(
-    'Business Agent',
-    'Your personal shopping assistant.',
-    '/images/logo.jpg',
-    'Hello, I am your Business Agent. How can I help you?',
-    'Shop with Business Agent',
+  'Tenor',
+  'A privacy-first lending assistant.',
+  '/images/logo.jpg',
+  "Hi — I'm Tenor. I'll help you shop lenders, compare real offers, and keep your personal details out of the AI's hands. What are you thinking about borrowing for?",
+  'Tenor',
+  'Privacy-first lending',
 );

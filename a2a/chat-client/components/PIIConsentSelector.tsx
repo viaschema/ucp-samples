@@ -6,13 +6,8 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
+import {useState} from 'react';
 import type {PIIMethod} from '../types';
 
 interface PIIConsentSelectorProps {
@@ -23,10 +18,6 @@ interface PIIConsentSelectorProps {
   onSelect: (piiMethodId: string) => void;
 }
 
-/**
- * Displays available PII profiles for the user to authorize sharing.
- * Shows which lenders will receive the data and which fields will be shared.
- */
 export default function PIIConsentSelector({
   piiMethods,
   lenderNames,
@@ -34,6 +25,9 @@ export default function PIIConsentSelector({
   loanType,
   onSelect,
 }: PIIConsentSelectorProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
   const formatFieldName = (field: string) =>
     field
       .split('_')
@@ -42,72 +36,130 @@ export default function PIIConsentSelector({
 
   const displayFields = requiredFields.length > 0 ? requiredFields : undefined;
 
+  const handleAuthorize = (id: string) => {
+    setSelectedId(id);
+    onSelect(id);
+  };
+
   return (
-    <div className="w-full my-2 border border-blue-200 rounded-lg p-4 bg-blue-50">
-      <h3 className="font-semibold text-lg text-gray-900 mb-2">
-        Authorize PII Sharing
-      </h3>
-      <p className="text-sm text-gray-600 mb-3">
-        Your data is shared securely via token with the lenders below. Raw data
-        never passes through the agent.
-      </p>
-      <div className="mb-3">
-        <p className="text-sm font-medium text-gray-700 mb-1">Loan type:</p>
-        <span className="inline-block px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full font-medium capitalize">
-          {loanType}
-        </span>
-      </div>
-      {lenderNames.length > 0 && (
-        <div className="mb-3">
-          <p className="text-sm font-medium text-gray-700 mb-1">
-            Sharing with:
+    <div className="w-full my-3 surface p-5 md:p-6 reveal">
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div>
+          <div className="caps text-copper mb-1.5">Authorize lender access</div>
+          <h3 className="display text-[1.45rem] md:text-[1.7rem] leading-[1.1] text-ink mb-2">
+            Mint per-lender access tokens.
+          </h3>
+          <p className="text-[0.92rem] text-ink-muted leading-snug max-w-[52ch]">
+            Each lender below receives only the fields you consent to — and
+            only for this one application. The AI still never sees the raw
+            values, only confirmation that the hand-off happened.
           </p>
-          <div className="flex flex-wrap gap-1">
-            {lenderNames.map((name) => (
-              <span
-                key={name}
-                className="inline-block px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full font-medium">
-                {name}
-              </span>
-            ))}
+        </div>
+        <div
+          aria-label="Secured"
+          className="flex-shrink-0 text-moss">
+          <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6">
+            <rect x="4" y="9" width="16" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+            <path
+              d="M8 9V7a4 4 0 118 0v2"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <div className="surface-quiet p-3">
+          <div className="caps text-ink-muted mb-1">Loan type</div>
+          <div className="display-tight text-[1.05rem] text-ink capitalize">
+            {loanType}
           </div>
         </div>
-      )}
-      {displayFields && (
-        <div className="mb-3">
-          <p className="text-sm font-medium text-gray-700 mb-1">
-            Fields to be shared:
-          </p>
-          <div className="flex flex-wrap gap-1">
+        <div className="surface-quiet p-3">
+          <div className="caps text-ink-muted mb-1">Lenders</div>
+          <div className="display-tight text-[1.05rem] text-ink">
+            {lenderNames.length} {lenderNames.length === 1 ? 'lender' : 'lenders'}
+          </div>
+          {lenderNames.length > 0 && (
+            <div className="text-[0.78rem] text-ink-muted mt-0.5 leading-tight">
+              {lenderNames.join(' · ')}
+            </div>
+          )}
+        </div>
+        <div className="surface-quiet p-3">
+          <div className="caps text-ink-muted mb-1">Fields shared</div>
+          <div className="display-tight text-[1.05rem] text-ink">
+            {displayFields ? displayFields.length : '—'}
+          </div>
+          {displayFields && (
+            <button
+              type="button"
+              onClick={() => setExpanded((s) => !s)}
+              className="text-[0.76rem] text-copper hover:underline mt-0.5">
+              {expanded ? 'Hide fields' : 'Show the list'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {expanded && displayFields && (
+        <div className="surface-deep p-4 mb-4 reveal">
+          <div className="caps text-ink-muted mb-2">
+            Each lender will receive these values from the vault
+          </div>
+          <div className="flex flex-wrap gap-1.5">
             {displayFields.map((field) => (
               <span
                 key={field}
-                className="inline-block px-2 py-0.5 text-xs bg-white text-gray-700 rounded border border-gray-200">
+                className="inline-flex items-center px-2.5 py-1 text-[0.78rem] bg-paper border border-[var(--rule)] rounded-md text-ink">
+                <svg
+                  viewBox="0 0 12 12"
+                  className="w-2.5 h-2.5 mr-1.5 text-moss"
+                  fill="currentColor"
+                  aria-hidden>
+                  <path d="M6 1a3 3 0 00-3 3v2H2.5a.5.5 0 00-.5.5v4a.5.5 0 00.5.5h7a.5.5 0 00.5-.5v-4a.5.5 0 00-.5-.5H9V4a3 3 0 00-3-3zm-2 3a2 2 0 114 0v2H4V4z" />
+                </svg>
                 {formatFieldName(field)}
               </span>
             ))}
           </div>
         </div>
       )}
+
+      <hr className="hairline my-4" />
+
       <div className="space-y-2">
         {piiMethods.map((method) => (
           <div
             key={method.id}
-            className="border border-gray-200 rounded-lg p-3 bg-white">
-            <div className="flex items-center justify-between">
-              <span className="font-medium text-gray-900">
-                PII Profile ({method.fields_stored.length} fields stored)
-              </span>
-              <button
-                type="button"
-                onClick={() => onSelect(method.id)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
-                Authorize
-              </button>
+            className="surface-quiet p-3.5 flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <div className="display-tight text-[1.02rem] text-ink">
+                Vaulted profile
+              </div>
+              <div className="text-[0.78rem] text-ink-muted mt-0.5 mono">
+                {method.fields_stored.length} fields tokenized · id{' '}
+                {method.id.slice(0, 8)}…
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => handleAuthorize(method.id)}
+              disabled={selectedId === method.id}
+              className="btn btn-primary">
+              {selectedId === method.id ? 'Authorizing…' : 'Authorize & send'}
+            </button>
           </div>
         ))}
       </div>
+
+      <p className="text-[0.72rem] text-ink-soft mt-3 leading-snug">
+        Authorization mints per-lender tokens scoped to the fields listed above.
+        The AI sees only the tokens; raw values are released in-flight to each
+        lender's API and nowhere else.
+      </p>
     </div>
   );
 }

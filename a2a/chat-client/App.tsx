@@ -17,6 +17,8 @@ import {useEffect, useRef, useState} from 'react';
 import ChatInput from './components/ChatInput';
 import ChatMessageComponent from './components/ChatMessage';
 import Header from './components/Header';
+import LandingSuggestions from './components/LandingSuggestions';
+import Marginalia from './components/Marginalia';
 import {appConfig} from './config';
 import {apiFetch} from './lib/apiClient';
 import {CredentialProviderProxy} from './mocks/credentialProviderProxy';
@@ -71,6 +73,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [contextId, setContextId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [prefill, setPrefill] = useState<string | undefined>(undefined);
   const credentialProvider = useRef(new CredentialProviderProxy());
   const piiProvider = useRef(new PIIProviderProxy());
   const pendingPIIInstruments = useRef<PIIInstrument[] | null>(null);
@@ -658,40 +661,67 @@ function App() {
 
   const lastCheckoutIndex = messages.map((m) => !!m.checkout).lastIndexOf(true);
 
+  const showLanding =
+    messages.length === 1 && messages[0].id === 'initial' && !isLoading;
+
+  const handleSuggestPrefill = (prompt: string) => {
+    setPrefill(prompt);
+  };
+
   return (
-    <div className="flex flex-col h-screen max-h-screen bg-white font-sans">
+    <div className="flex flex-col h-screen max-h-screen bg-paper font-sans">
       <Header />
       <main
         ref={chatContainerRef}
-        className="flex-grow overflow-y-auto p-4 md:p-6 space-y-2">
-        {messages.map((msg, index) => (
-          <ChatMessageComponent
-            key={msg.id}
-            message={msg}
-            onAddToCart={handleAddToCheckout}
-            onAddServiceToCheckout={handleAddServiceToCheckout}
-            onSelectLocation={handleSelectLocation}
-            onSelectTimeSlot={handleSelectTimeSlot}
-            onCheckout={
-              msg.checkout?.status !== 'ready_for_complete' && !msg.checkout?.lending?.loan_type
-                ? handleStartPayment
-                : undefined
-            }
-            onSelectPaymentMethod={handlePaymentMethodSelected}
-            onConfirmPayment={handleConfirmPayment}
-            onCompletePayment={
-              msg.checkout?.status === 'ready_for_complete' && !msg.checkout?.lending?.loan_type
-                ? handlePaymentMethodSelection
-                : undefined
-            }
-            isLastCheckout={index === lastCheckoutIndex}
-            onSelectPIIMethod={handlePIIMethodSelected}
-            onPIICollected={handlePIICollected}
-            onSubmitNonPII={handleSubmitNonPII}
-            userEmail={user_email || undefined}></ChatMessageComponent>
-        ))}
+        className="flex-grow overflow-y-auto">
+        <div className="max-w-offers mx-auto px-4 md:px-6 py-6 flex gap-6">
+          <div className="flex-grow min-w-0">
+            <div className="max-w-chat mx-auto space-y-2">
+              {messages.map((msg, index) => (
+                <ChatMessageComponent
+                  key={msg.id}
+                  message={msg}
+                  onAddToCart={handleAddToCheckout}
+                  onAddServiceToCheckout={handleAddServiceToCheckout}
+                  onSelectLocation={handleSelectLocation}
+                  onSelectTimeSlot={handleSelectTimeSlot}
+                  onCheckout={
+                    msg.checkout?.status !== 'ready_for_complete' &&
+                    !msg.checkout?.lending?.loan_type
+                      ? handleStartPayment
+                      : undefined
+                  }
+                  onSelectPaymentMethod={handlePaymentMethodSelected}
+                  onConfirmPayment={handleConfirmPayment}
+                  onCompletePayment={
+                    msg.checkout?.status === 'ready_for_complete' &&
+                    !msg.checkout?.lending?.loan_type
+                      ? handlePaymentMethodSelection
+                      : undefined
+                  }
+                  isLastCheckout={index === lastCheckoutIndex}
+                  onSelectPIIMethod={handlePIIMethodSelected}
+                  onPIICollected={handlePIICollected}
+                  onSubmitNonPII={handleSubmitNonPII}
+                  userEmail={user_email || undefined}
+                />
+              ))}
+
+              {showLanding && (
+                <div className="pt-4">
+                  <LandingSuggestions onSuggest={handleSuggestPrefill} />
+                </div>
+              )}
+            </div>
+          </div>
+          <Marginalia messages={messages} />
+        </div>
       </main>
-      <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+      <ChatInput
+        onSendMessage={handleSendMessage}
+        isLoading={isLoading}
+        prefill={prefill}
+      />
     </div>
   );
 }

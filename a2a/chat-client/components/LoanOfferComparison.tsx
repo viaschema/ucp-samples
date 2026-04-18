@@ -6,12 +6,6 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 import {useState} from 'react';
 import type {LoanOffer} from '../types';
@@ -21,6 +15,12 @@ interface LoanOfferComparisonProps {
 }
 
 type SortField = 'rate' | 'term_months' | 'monthly_payment';
+
+const SORT_LABELS: Record<SortField, string> = {
+  rate: 'APR',
+  term_months: 'Term',
+  monthly_payment: 'Monthly',
+};
 
 export default function LoanOfferComparison({
   offers,
@@ -45,28 +45,39 @@ export default function LoanOfferComparison({
     }).format(amount);
 
   return (
-    <div className="w-full my-2">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-lg text-gray-900">
-          Loan Offers ({offers.length})
-        </h3>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-gray-500">Sort by:</span>
-          {(['rate', 'term_months', 'monthly_payment'] as SortField[]).map(
-            (field) => (
+    <section className="w-full my-4 reveal" aria-label="Loan offers">
+      <div className="flex items-end justify-between mb-4 gap-4 flex-wrap">
+        <div>
+          <div className="caps text-copper mb-1">Offers delivered</div>
+          <h3 className="display text-[1.55rem] md:text-[1.85rem] text-ink leading-none">
+            {offers.length} {offers.length === 1 ? 'offer' : 'offers'} from your lenders
+          </h3>
+        </div>
+        <div className="flex items-center gap-1" role="tablist" aria-label="Sort offers">
+          <span className="caps text-ink-muted mr-2">Sort</span>
+          {(['rate', 'term_months', 'monthly_payment'] as SortField[]).map((field) => {
+            const active = sortBy === field;
+            return (
               <button
                 key={field}
                 type="button"
                 onClick={() => setSortBy(field)}
-                className={`px-2 py-1 rounded ${sortBy === field ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}>
-                {field === 'rate'
-                  ? 'Rate'
-                  : field === 'term_months'
-                    ? 'Term'
-                    : 'Payment'}
+                role="tab"
+                aria-selected={active}
+                className={`caps px-2.5 py-1.5 rounded-md transition-colors ${
+                  active
+                    ? 'bg-ink text-paper'
+                    : 'text-ink-muted hover:text-ink hover:bg-paper-deep'
+                }`}>
+                {SORT_LABELS[field]}
+                {active && (
+                  <span className="ml-1 opacity-90" aria-hidden>
+                    ↑
+                  </span>
+                )}
               </button>
-            ),
-          )}
+            );
+          })}
         </div>
       </div>
 
@@ -77,73 +88,84 @@ export default function LoanOfferComparison({
           const totalInterest = totalCost - offer.amount;
 
           return (
-            <div
+            <article
               key={`${offer.lender_name}-${offer.rate}-${offer.term_months}-${index}`}
-              className={`rounded-lg border p-4 ${
-                isBest
-                  ? 'border-green-300 bg-green-50'
-                  : 'border-gray-200 bg-white hover:border-gray-300'
+              className={`surface p-4 md:p-5 relative ${
+                isBest ? 'border-l-4 border-l-[var(--copper)] pl-[calc(1rem-3px)] md:pl-[calc(1.25rem-3px)]' : ''
               }`}>
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-900 text-base">
-                    {offer.lender_name}
-                  </span>
-                  {isBest && (
-                    <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full">
-                      Best Rate
-                    </span>
-                  )}
-                </div>
-                <span className="text-2xl font-bold text-gray-900">
-                  {offer.rate}%
-                  <span className="text-xs font-normal text-gray-500 ml-1">
-                    APR
-                  </span>
+              {isBest && (
+                <span className="absolute -top-2.5 left-4 caps bg-moss text-paper px-2 py-0.5 rounded-sm">
+                  Best rate
                 </span>
+              )}
+
+              <div className="flex items-start justify-between gap-4 mb-4 flex-wrap">
+                <div className="min-w-0">
+                  <div className="caps text-ink-muted mb-0.5">Lender</div>
+                  <div className="display-tight text-[1.3rem] text-ink truncate">
+                    {offer.lender_name}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="caps text-ink-muted mb-0.5">APR</div>
+                  <div className="display text-[2.15rem] md:text-[2.5rem] leading-none text-ink tnum">
+                    {offer.rate.toFixed(2)}
+                    <span className="text-[1rem] align-top text-ink-muted ml-0.5">%</span>
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-4 gap-3 mb-3 text-sm">
-                <div>
-                  <span className="text-gray-500 block">Monthly</span>
-                  <span className="font-semibold text-gray-900">
-                    {formatPayment(offer.monthly_payment)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500 block">Term</span>
-                  <span className="font-semibold text-gray-900">
-                    {offer.term_months} months
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500 block">Amount</span>
-                  <span className="font-semibold text-gray-900">
-                    {formatCurrency(offer.amount)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500 block">Total Interest</span>
-                  <span className="font-semibold text-gray-900">
-                    {formatCurrency(totalInterest)}
-                  </span>
-                </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-4">
+                <Stat label="Monthly" value={formatPayment(offer.monthly_payment)} />
+                <Stat label="Term" value={`${offer.term_months} mo`} />
+                <Stat label="Principal" value={formatCurrency(offer.amount)} />
+                <Stat label="Total interest" value={formatCurrency(totalInterest)} muted />
               </div>
 
               <a
                 href={offer.continue_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`block w-full text-center py-2 px-4 rounded-md text-sm font-semibold transition-colors ${
-                  isBest
-                    ? 'bg-green-600 hover:bg-green-700 text-white'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
-                }`}>
-                Apply at {offer.lender_name}
+                className={`btn w-full ${isBest ? 'btn-copper' : 'btn-primary'}`}>
+                Continue at {offer.lender_name}
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" aria-hidden>
+                  <path
+                    d="M5 11l6-6m0 0H6m5 0v5"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </a>
-            </div>
+            </article>
           );
         })}
+      </div>
+
+      <p className="caps text-ink-soft mt-4">
+        Rates shown are from each lender's live pricing engine · Continuing
+        opens the lender's site
+      </p>
+    </section>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  muted,
+}: {
+  label: string;
+  value: string;
+  muted?: boolean;
+}) {
+  return (
+    <div>
+      <div className="caps text-ink-muted mb-1">{label}</div>
+      <div
+        className={`mono tnum text-[1.02rem] ${muted ? 'text-ink-muted' : 'text-ink'}`}>
+        {value}
       </div>
     </div>
   );

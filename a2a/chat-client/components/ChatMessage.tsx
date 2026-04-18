@@ -6,12 +6,6 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 import {appConfig} from '@/config';
 import {
@@ -47,20 +41,41 @@ interface ChatMessageProps {
   userEmail?: string;
 }
 
+function BotAvatar() {
+  return (
+    <div
+      className="w-8 h-8 rounded-full surface-deep flex items-center justify-center text-ink"
+      aria-hidden>
+      <svg viewBox="0 0 20 20" fill="none" className="w-4 h-4">
+        <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.25" />
+        <path
+          d="M7 11c.7.9 1.8 1.5 3 1.5s2.3-.6 3-1.5"
+          stroke="currentColor"
+          strokeWidth="1.25"
+          strokeLinecap="round"
+          fill="none"
+        />
+        <circle cx="7.8" cy="8.5" r="0.85" fill="currentColor" />
+        <circle cx="12.2" cy="8.5" r="0.85" fill="currentColor" />
+      </svg>
+    </div>
+  );
+}
+
 function TypingIndicator() {
   return (
-    <div className="w-full my-1 justify-start">
-      <div className="flex items-center gap-2 mb-1">
-        <div className="flex-shrink-0">
-          <img alt="logo" src={appConfig.logoUrl} className="w-8 h-8" />
-        </div>
-        <span className="font-semibold text-gray-700">{appConfig.name}</span>
+    <div className="w-full my-2 reveal">
+      <div className="flex items-center gap-2 mb-1.5">
+        <BotAvatar />
+        <span className="caps text-ink-muted">{appConfig.name}</span>
       </div>
-      <div className="ml-10 px-4 py-3 rounded-2xl shadow-sm bg-gray-200 text-gray-800 self-start inline-block">
-        <div className="flex items-center space-x-2 h-5">
-          <span className="h-2 w-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-          <span className="h-2 w-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-          <span className="h-2 w-2 bg-gray-400 rounded-full animate-bounce"></span>
+      <div
+        className="ml-10 surface inline-flex px-4 py-3"
+        aria-label="Tenor is composing">
+        <div className="dot-pulse flex items-center gap-1.5 h-4">
+          <span className="w-1.5 h-1.5 rounded-full bg-ink-muted block" />
+          <span className="w-1.5 h-1.5 rounded-full bg-ink-muted block" />
+          <span className="w-1.5 h-1.5 rounded-full bg-ink-muted block" />
         </div>
       </div>
     </div>
@@ -89,42 +104,36 @@ function ChatMessageComponent({
     return <TypingIndicator />;
   }
 
-  // User messages are handled separately
   if (isUser) {
     return (
-      <div className="flex w-full my-1 items-start gap-2 justify-end">
-        <div className="max-w-xs md:max-w-md lg:max-w-2xl px-4 py-2 rounded-2xl shadow-sm bg-blue-500 text-white self-end">
-          <div className="whitespace-pre-wrap break-words">{message.text}</div>
+      <div className="flex w-full my-2 items-start gap-2 justify-end reveal">
+        <div className="max-w-[85%] md:max-w-md lg:max-w-xl px-4 py-2.5 surface border-l-2 border-l-[var(--copper)] text-ink">
+          <div className="whitespace-pre-wrap break-words text-[0.95rem] leading-snug">
+            {message.text}
+          </div>
         </div>
-        <div className="flex-shrink-0 pt-1">
-          <UserLogo className="w-8 h-8 text-gray-400" />
+        <div className="flex-shrink-0 pt-0.5">
+          <UserLogo className="w-8 h-8 text-ink-muted" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full my-1 justify-start">
-      <div className="flex items-center gap-2 mb-1">
-        <div className="flex-shrink-0">
-          <img
-            src={appConfig.logoUrl}
-            alt={appConfig.name}
-            className="w-8 h-8"
-          />
-        </div>
-        <span className="font-semibold text-gray-700">{appConfig.name}</span>
+    <div className="w-full my-2 justify-start reveal">
+      <div className="flex items-center gap-2 mb-1.5">
+        <BotAvatar />
+        <span className="caps text-ink-muted">{appConfig.name}</span>
       </div>
-      <div className="ml-10 flex-grow min-w-0">
+      <div className="ml-10 flex-grow min-w-0 space-y-2">
         {message.text && (
-          <div className="max-w-xs md:max-w-md lg:max-w-2xl px-4 py-2 rounded-2xl shadow-sm bg-gray-200 text-gray-800 self-start inline-block">
-            <div className="break-words whitespace-pre-wrap">
+          <div className="max-w-[92%] md:max-w-md lg:max-w-xl surface inline-block px-4 py-2.5 text-ink">
+            <div className="break-words whitespace-pre-wrap text-[0.95rem] leading-snug">
               {message.text}
             </div>
           </div>
         )}
 
-        {/* Domain renderers — each domain handles its own content */}
         <ShoppingRenderer
           message={message}
           onAddToCart={onAddToCart}
