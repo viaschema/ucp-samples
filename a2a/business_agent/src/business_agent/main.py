@@ -168,6 +168,7 @@ async def run(host, port):
     cors_origins = [
         f"https://{vgs_vault_id}.sandbox.verygoodproxy.com",
         f"https://{vgs_vault_id}.live.verygoodproxy.com",
+        "https://js.verygoodvault.com",  # VGS Collect JS iframe origin
         "http://localhost:3000",  # Vite dev server
         "http://localhost:5173",  # Vite default port
     ]
