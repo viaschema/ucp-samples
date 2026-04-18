@@ -19,7 +19,7 @@ data:
                 type: string
                 values:
                   - /pii/store
-        id: <your-vgs-route-entry-id>
+        id: e8751c1c-9027-453c-8728-dd62ba3851f9
         operation: REDACT
         phase: REQUEST
         public_token_generator: UUID
@@ -46,6 +46,6 @@ data:
           - $.pii_data.employer_address_address_region
           - $.pii_data.employer_address_postal_code
           - $.pii_data.employer_address_address_country
-  id: <your-vgs-rule-chain-id>
+  id: e8dba9bd-7a5d-4384-8d6f-98409e507b43
   type: rule_chain
 version: 1

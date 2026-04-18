@@ -18,7 +18,7 @@ data:
                 type: string
                 values:
                   - /lender-api/.*
-        id: <your-vgs-route-entry-id>
+        id: 32d805a2-02ff-4aa6-bebc-aa37ffccd97c
         operation: ENRICH
         phase: REQUEST
         public_token_generator: UUID
@@ -46,6 +46,6 @@ data:
           - $.employer_address_address_region
           - $.employer_address_postal_code
           - $.employer_address_address_country
-  id: <your-vgs-rule-chain-id>
+  id: 3b64f168-9fdf-4e5d-8dd7-eef94d074cf6
   type: rule_chain
 version: 1
