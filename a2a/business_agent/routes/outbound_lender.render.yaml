@@ -1,0 +1,51 @@
+data:
+- attributes:
+    host_endpoint: business-agent-b13r.onrender.com
+    destination_override_endpoint: '*'
+    port: 443
+    protocol: http
+    source_endpoint: '*'
+    tags:
+      name: Lender Outbound Route (Render)
+    entries:
+      - classifiers: {}
+        config:
+          condition: AND
+          rules:
+            - expression:
+                field: PathInfo
+                operator: matches
+                type: string
+                values:
+                  - /lender-api/.*
+        id: <your-vgs-route-entry-id>
+        operation: ENRICH
+        phase: REQUEST
+        public_token_generator: UUID
+        targets:
+          - body
+        token_manager: PERSISTENT
+        transformer: JSON_PATH
+        transformer_config:
+          - $.first_name
+          - $.last_name
+          - $.email
+          - $.phone_number
+          - $.annual_income
+          - $.date_of_birth
+          - $.monthly_housing_payment
+          - $.employer_phone_number
+          - $.living_situation
+          - $.address_street_address
+          - $.address_address_locality
+          - $.address_address_region
+          - $.address_postal_code
+          - $.address_address_country
+          - $.employer_address_street_address
+          - $.employer_address_address_locality
+          - $.employer_address_address_region
+          - $.employer_address_postal_code
+          - $.employer_address_address_country
+  id: <your-vgs-rule-chain-id>
+  type: rule_chain
+version: 1
