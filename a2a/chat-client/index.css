@@ -9,20 +9,36 @@
  */
 
 :root {
-  --paper: #f3eedf;
-  --paper-deep: #ebe4d0;
-  --ink: #15141a;
-  --ink-muted: #4f4a4e;
-  --ink-soft: #6c666a;
+  /* App background is a warm studio grey; cards float on top in near-white. */
+  --paper: #eceef1;
+  --paper-deep: #e1e3e8;
+  --card: #ffffff;
+  --card-soft: #f7f8fa;
+
+  --ink: #1a1c20;
+  --ink-muted: #53575e;
+  --ink-soft: #797d84;
+
   --copper: #a44626;
   --copper-soft: #c6623c;
   --moss: #2e4a3c;
   --moss-soft: #4e6a5b;
   --oxblood: #7a2a22;
-  --rule: rgba(21, 20, 26, 0.14);
-  --rule-strong: rgba(21, 20, 26, 0.28);
 
-  --font-display: 'Fraunces', Georgia, serif;
+  --rule: rgba(26, 28, 32, 0.11);
+  --rule-strong: rgba(26, 28, 32, 0.22);
+
+  --shadow-card:
+    0 1px 0 rgba(26, 28, 32, 0.02),
+    0 2px 6px rgba(26, 28, 32, 0.04),
+    0 8px 24px rgba(26, 28, 32, 0.05);
+  --shadow-card-hover:
+    0 1px 0 rgba(26, 28, 32, 0.03),
+    0 4px 12px rgba(26, 28, 32, 0.06),
+    0 16px 36px rgba(26, 28, 32, 0.07);
+
+  --font-display:
+    'Google Sans Flex', 'Google Sans', 'Helvetica Neue', sans-serif;
   --font-sans: 'Instrument Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 }
@@ -37,16 +53,16 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Paper grain: very low-opacity SVG noise under all content. */
+/* Faint monochrome grain — softer than the parchment version. */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.5;
+  opacity: 0.35;
   mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.08 0 0 0 0 0.08 0 0 0 0 0.10 0 0 0 0.045 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='5' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.06 0 0 0 0 0.07 0 0 0 0 0.08 0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 
 #root {
@@ -58,16 +74,14 @@ body::before {
 
 .display {
   font-family: var(--font-display);
-  font-optical-sizing: auto;
-  font-variation-settings: 'opsz' 144, 'SOFT' 30;
-  letter-spacing: -0.01em;
+  font-weight: 500;
+  letter-spacing: -0.015em;
 }
 
 .display-tight {
   font-family: var(--font-display);
-  font-optical-sizing: auto;
-  font-variation-settings: 'opsz' 48, 'SOFT' 0;
-  letter-spacing: -0.015em;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 .mono {
@@ -82,7 +96,7 @@ body::before {
 .caps {
   font-family: var(--font-sans);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.11em;
   font-weight: 500;
   font-size: 0.68rem;
 }
@@ -90,14 +104,14 @@ body::before {
 /* ---------- Surfaces ---------- */
 
 .surface {
-  background: var(--paper);
+  background: var(--card);
   border: 1px solid var(--rule);
-  border-radius: 10px;
-  box-shadow: none;
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
 }
 
 .surface-quiet {
-  background: color-mix(in srgb, var(--paper) 92%, var(--ink) 0%);
+  background: var(--card-soft);
   border: 1px solid var(--rule);
   border-radius: 10px;
 }
@@ -106,6 +120,12 @@ body::before {
   background: var(--paper-deep);
   border: 1px solid var(--rule);
   border-radius: 10px;
+}
+
+.surface-flat {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
 }
 
 .hairline {
@@ -123,7 +143,7 @@ body::before {
   gap: 0.5rem;
   min-height: 44px;
   padding: 0 1.1rem;
-  border-radius: 8px;
+  border-radius: 10px;
   font-family: var(--font-sans);
   font-weight: 500;
   font-size: 0.95rem;
@@ -133,7 +153,8 @@ body::before {
     background 140ms ease,
     color 140ms ease,
     border-color 140ms ease,
-    transform 140ms ease;
+    transform 140ms ease,
+    box-shadow 140ms ease;
   border: 1px solid transparent;
   -webkit-appearance: none;
   appearance: none;
@@ -146,40 +167,40 @@ body::before {
 
 .btn-primary {
   background: var(--ink);
-  color: var(--paper);
+  color: var(--card);
 }
 .btn-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ink) 88%, var(--copper) 12%);
+  background: color-mix(in srgb, var(--ink) 86%, var(--copper) 14%);
 }
 
 .btn-seal {
   background: var(--moss);
-  color: var(--paper);
+  color: var(--card);
 }
 .btn-seal:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--moss) 88%, var(--copper) 12%);
+  background: color-mix(in srgb, var(--moss) 88%, black 12%);
 }
 
 .btn-copper {
   background: var(--copper);
-  color: var(--paper);
+  color: var(--card);
 }
 .btn-copper:hover:not(:disabled) {
   background: color-mix(in srgb, var(--copper) 90%, black 10%);
 }
 
 .btn-ghost {
-  background: transparent;
+  background: var(--card);
   color: var(--ink);
   border-color: var(--rule);
 }
 .btn-ghost:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--paper) 60%, var(--paper-deep) 40%);
+  background: var(--card-soft);
   border-color: var(--rule-strong);
 }
 
 .btn:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -187,14 +208,16 @@ body::before {
 
 .field {
   width: 100%;
-  background: var(--paper);
+  background: var(--card);
   border: 1px solid var(--rule);
-  border-radius: 8px;
-  padding: 0.62rem 0.85rem;
+  border-radius: 10px;
+  padding: 0.65rem 0.9rem;
   font-family: var(--font-sans);
   font-size: 0.95rem;
   color: var(--ink);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .field:focus {
@@ -271,7 +294,7 @@ body::before {
   }
 }
 
-/* ---------- Scrollbar hairline (webkit) ---------- */
+/* ---------- Scrollbars ---------- */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

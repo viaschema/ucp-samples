@@ -44,21 +44,21 @@ const VGS_FIELD_CSS = {
     "'Instrument Sans', system-ui, -apple-system, sans-serif",
   'font-size': '0.95rem',
   'line-height': '1.25rem',
-  color: '#15141A',
-  padding: '0.62rem 0.85rem',
+  color: '#1A1C20',
+  padding: '0.65rem 0.9rem',
   width: '100%',
   height: '100%',
   'box-sizing': 'border-box',
-  background: '#F3EEDF',
-  border: '1px solid rgba(21,20,26,0.14)',
-  'border-radius': '8px',
+  background: '#FFFFFF',
+  border: '1px solid rgba(26,28,32,0.11)',
+  'border-radius': '10px',
   '&:focus': {
     outline: 'none',
     'border-color': '#A44626',
     'box-shadow': '0 0 0 3px rgba(164,70,38,0.22)',
   },
   '&::placeholder': {
-    color: '#8B858A',
+    color: '#9CA0A8',
   },
 };
 
