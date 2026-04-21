@@ -39,10 +39,10 @@ export class AppProperties {
 }
 
 export const appConfig = new AppProperties(
-  'Tenor',
-  'A privacy-first lending assistant.',
-  '/images/logo.jpg',
-  "Hi — I'm Tenor. I'll help you shop lenders, compare real offers, and keep your personal details out of the AI's hands. What are you thinking about borrowing for?",
-  'Tenor',
+  'Personal Finance Agent',
+  'A privacy-first personal finance assistant.',
+  '/images/bank-icon.webp',
+  "Hi — I'm your Personal Finance Agent. I'll help you shop lenders, compare real offers, and keep your personal details out of the AI's hands. What are you thinking about borrowing for?",
+  'Personal Finance Agent',
   'Privacy-first lending',
 );

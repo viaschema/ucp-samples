@@ -519,7 +519,7 @@ export default function VGSPIICollectionForm({
         <hr className="hairline my-4" />
 
         <p className="text-[0.78rem] text-ink-muted leading-snug">
-          Tenor uses <span className="mono">VGS</span> for tokenization. Your
+          This assistant uses <span className="mono">VGS</span> for tokenization. Your
           SSN, birthdate, income, and address stay encrypted end-to-end. The AI
           model never receives them — not during this conversation, not in
           logs, not in training data.

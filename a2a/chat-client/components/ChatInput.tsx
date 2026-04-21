@@ -83,7 +83,7 @@ function ChatInput({onSendMessage, isLoading, prefill}: ChatInputProps) {
       </form>
       <div className="max-w-chat mx-auto px-4 md:px-6 pb-3 -mt-2">
         <p className="text-[0.7rem] text-ink-soft tracking-wide">
-          Tenor never sends your SSN, income, or address to the AI. Those go
+          Your SSN, income, or address is never sent to the AI. Those go
           directly into a VGS vault — only an opaque token reaches this
           conversation.
         </p>

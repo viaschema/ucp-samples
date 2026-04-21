@@ -10,37 +10,17 @@
 import {useEffect, useState} from 'react';
 import {appConfig} from '@/config';
 
-function LockMark() {
+function BrandMark() {
   return (
-    <svg
-      viewBox="0 0 32 32"
-      className="w-8 h-8 text-ink"
-      fill="none"
+    <div
+      className="w-10 h-10 rounded-md surface-deep flex items-center justify-center overflow-hidden"
       aria-hidden>
-      <circle cx="16" cy="16" r="15" stroke="currentColor" strokeWidth="1.25" />
-      <path
-        d="M11 15.5v-2a5 5 0 1110 0v2"
-        stroke="currentColor"
-        strokeWidth="1.25"
-        strokeLinecap="round"
+      <img
+        src={appConfig.logoUrl}
+        alt=""
+        className="w-7 h-7 object-contain"
       />
-      <rect
-        x="10"
-        y="15.5"
-        width="12"
-        height="8.5"
-        rx="1.25"
-        stroke="currentColor"
-        strokeWidth="1.25"
-      />
-      <circle cx="16" cy="19.5" r="1.15" fill="currentColor" />
-      <path
-        d="M16 20.5v1.6"
-        stroke="currentColor"
-        strokeWidth="1.25"
-        strokeLinecap="round"
-      />
-    </svg>
+    </div>
   );
 }
 
@@ -63,7 +43,7 @@ function PrivacyExplainerModal({onClose}: {onClose: () => void}) {
       <div
         className="surface max-w-xl w-full p-6 md:p-8 reveal"
         onClick={(e) => e.stopPropagation()}>
-        <div className="caps text-copper mb-2">How Tenor handles your data</div>
+        <div className="caps text-copper mb-2">How this agent handles your data</div>
         <h2
           id="privacy-modal-title"
           className="display text-[1.7rem] md:text-[2rem] text-ink leading-[1.1] mb-4">
@@ -117,9 +97,9 @@ function Header() {
       <header className="bg-paper border-b border-[var(--rule)] flex-shrink-0">
         <div className="max-w-offers mx-auto px-4 md:px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <LockMark />
-            <div className="flex flex-col leading-none">
-              <span className="display text-[1.75rem] text-ink">
+            <BrandMark />
+            <div className="flex flex-col leading-none min-w-0">
+              <span className="display text-[1.3rem] md:text-[1.55rem] text-ink leading-tight">
                 {appConfig.titleText}
               </span>
               <span className="caps text-ink-muted mt-1">

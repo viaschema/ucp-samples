@@ -44,20 +44,13 @@ interface ChatMessageProps {
 function BotAvatar() {
   return (
     <div
-      className="w-8 h-8 rounded-full surface-deep flex items-center justify-center text-ink"
+      className="w-8 h-8 rounded-md surface-deep flex items-center justify-center overflow-hidden"
       aria-hidden>
-      <svg viewBox="0 0 20 20" fill="none" className="w-4 h-4">
-        <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.25" />
-        <path
-          d="M7 11c.7.9 1.8 1.5 3 1.5s2.3-.6 3-1.5"
-          stroke="currentColor"
-          strokeWidth="1.25"
-          strokeLinecap="round"
-          fill="none"
-        />
-        <circle cx="7.8" cy="8.5" r="0.85" fill="currentColor" />
-        <circle cx="12.2" cy="8.5" r="0.85" fill="currentColor" />
-      </svg>
+      <img
+        src={appConfig.logoUrl}
+        alt=""
+        className="w-5 h-5 object-contain"
+      />
     </div>
   );
 }
@@ -71,7 +64,7 @@ function TypingIndicator() {
       </div>
       <div
         className="ml-10 surface inline-flex px-4 py-3"
-        aria-label="Tenor is composing">
+        aria-label={`${appConfig.name} is composing`}>
         <div className="dot-pulse flex items-center gap-1.5 h-4">
           <span className="w-1.5 h-1.5 rounded-full bg-ink-muted block" />
           <span className="w-1.5 h-1.5 rounded-full bg-ink-muted block" />
